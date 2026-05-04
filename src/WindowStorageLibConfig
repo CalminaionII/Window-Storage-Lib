@@ -1,0 +1,137 @@
+using System;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using Vintagestory.API.Common;
+
+namespace WindowStorageLib
+{
+    public class WindowStorageLibConfig
+    {
+        // ====================== Rain ======================
+        [Category("Rain on Window")]
+        [Display(Name = "Rain Comment", Description = "0 = off, 1 = very quiet, 5 = normal, 10 = loud")]
+        public string RainComment { get; set; } = "0 = off, 1 = very quiet, 5 = normal, 10 = loud";
+
+        [Category("Rain on Window")]
+        [Display(Name = "Enable Rain Sound")]
+        [Browsable(false)]
+        public bool EnableRainSound { get; set; } = true;
+
+        [Category("Rain on Window")]
+        [Display(Name = "Volume", Description = "0 = off, 1 = very quiet, 5 = normal, 10 = loud")]
+        [Range(0, 10)]
+        public int RainSoundVolume { get; set; } = 5;
+
+        [Category("Rain on Window")]
+        [Display(Name = "Rain Sound Range Comment", Description = "How many blocks away you can hear rain on windows (1 to 64)")]
+        public string RainSoundRangeComment { get; set; } = "How many blocks away you can hear rain on windows (1 to 64)";
+
+        [Category("Rain on Window")]
+        [Display(Name = "Range", Description = "How many blocks away you can hear rain on windows (1 to 64)")]
+        [Range(1, 64)]
+        public int RainSoundRange { get; set; } = 12;
+
+        // ====================== Animation ======================
+        [Category("Window Animation")]
+        [Display(Name = "Animation Comment", Description = "1 = very slow, 3 = normal, 5 = very fast")]
+        public string AnimationComment { get; set; } = "1 = very slow, 3 = normal, 5 = very fast";
+
+        [Category("Window Animation")]
+        [Display(Name = "Speed", Description = "1 = very slow, 3 = normal, 5 = very fast")]
+        [Range(1, 5)]
+        public int AnimationSpeed { get; set; } = 3;
+
+    
+        // ====================== Rotation ======================
+        [Category("Slot Rotation")]
+        [Display(Name = "Rotation Comment", Description = "Rotation Degrees (5 to 90)")]
+        public string RotationComment { get; set; } = "Rotation Degrees (5 to 90)";
+
+        [Category("Slot Rotation")]
+        [Display(Name = "Degrees", Description = "Rotation Degrees (5 to 90)")]
+        [Range(5, 90)]
+        public int RotationStepDegrees { get; set; } = 15;
+
+        // ====================== Stagger ======================
+        [Category("Slot Stagger")]
+        [Display(Name = "Stagger Comment", Description = "How far items move in stagger modes. 1 = subtle, 3 = normal, 5 = strong")]
+        public string StaggerComment { get; set; } = "How far items move in stagger modes. 1 = subtle, 3 = normal, 5 = strong";
+
+        [Category("Slot Stagger")]
+        [Display(Name = "Strength", Description = "How far items move in stagger modes. 1 = subtle, 3 = normal, 5 = strong")]
+        [Range(1, 5)]
+        public int StaggerStrength { get; set; } = 3;
+
+        // ====================== Computed values (hidden) ======================
+        [Newtonsoft.Json.JsonIgnore]
+        [Browsable(false)]
+        public float RainSoundVolumeValue => Math.Clamp(RainSoundVolume, 0, 10) * 0.1f;
+
+        [Newtonsoft.Json.JsonIgnore]
+        [Browsable(false)]
+        public float AnimationSpeedValue => AnimationSpeed switch
+        {
+            1 => 0.25f,
+            2 => 0.5f,
+            3 => 1.0f,
+            4 => 2.0f,
+            5 => 4.0f,
+            _ => 1.0f
+        };
+
+        [Newtonsoft.Json.JsonIgnore]
+        [Browsable(false)]
+        public float StaggerForwardOffset => Math.Clamp(StaggerStrength, 1, 5) * 0.03125f;
+
+        public static WindowStorageLibConfig Current { get; private set; }
+
+        public static void Load(ICoreAPI api)
+        {
+            try
+            {
+                Current = api.LoadModConfig<WindowStorageLibConfig>("windowstoragelibconfig.json");
+
+                if (Current == null)
+                {
+                    api.Logger.Notification("[WindowStorageLib] No config file found, creating default config");
+                    Current = new WindowStorageLibConfig();
+                    api.StoreModConfig(Current, "windowstoragelibconfig.json");
+                }
+                else
+                {
+                    api.Logger.Notification("[WindowStorageLib] Config loaded successfully");
+
+                    Current.RainSoundVolume = Math.Clamp(Current.RainSoundVolume, 1, 10);
+                    Current.RainSoundRange = Math.Clamp(Current.RainSoundRange, 1, 64);
+                    Current.AnimationSpeed = Math.Clamp(Current.AnimationSpeed, 1, 5);
+                    Current.RotationStepDegrees = Math.Clamp(Current.RotationStepDegrees, 5, 90);
+                    Current.StaggerStrength = Math.Clamp(Current.StaggerStrength, 1, 5);
+                }
+            }
+            catch (Exception e)
+            {
+                api.Logger.Error("[WindowStorageLib] Failed to load config, using defaults. Error: {0}", e.Message);
+                Current = new WindowStorageLibConfig();
+            }
+        }
+
+        public static void Save(ICoreAPI api)
+        {
+            if (Current == null)
+            {
+                api.Logger.Warning("[WindowStorageLib] Cannot save config - Current is null");
+                return;
+            }
+
+            try
+            {
+                api.StoreModConfig(Current, "windowstoragelibconfig.json");
+                api.Logger.Notification("[WindowStorageLib] Config saved successfully");
+            }
+            catch (Exception e)
+            {
+                api.Logger.Error("[WindowStorageLib] Failed to save config. Error: {0}", e.Message);
+            }
+        }
+    }
+}
