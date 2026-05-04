@@ -1,0 +1,791 @@
+{
+    "code": "example", //The code for the block, should be unique and match the file name
+    "class": "BlockWindowStorageLib", //Required for blocks that use the window storage library
+    "entityClass": "BEWindowStorageLib", //Required for blocks that use the window storage library
+    "variantgroups": [
+        {
+            "code": "style",
+            "states": [ "example" ] // Add your desired styles here used for attributesByType and shapeByType can be any name
+        },
+        {
+            "code": "state",
+            "states": [ "closed", "open" ] //Required for blocks that use the window storage library to define the open and closed states of the window must be named this way
+        }
+    ],
+    "shapeByType": {
+        "example": { "base": "example:block/example/static/example" } // Add your desired shape path here used for attributesByType and shapeByType, should only contain static parts can be any file path
+
+    },
+    "shapeInventoryByType": {
+        "*-example-*": { "base": "example:block/example/inventory/example-i" } //Should contain both the animated and static parts of the window, used for inventory rendering can be any file path
+
+    },
+    "behaviors": [
+        {
+            "name": "AttributeRenderingLibrary.BlockShapeTexturesFromAttributes", //Required to use ARL
+            "properties": {
+                "textures": {
+                    "wood-veryaged": {
+                        "frame": { "base": "game:block/wood/planks/aged/veryaged1" },
+                        "glass": {
+                            "base": "game:block/glass/{glass}",
+                            "overlays": [ "game:block/overlay/dust-sparse" ]
+                        },
+                        "putty": { "base": "game:block/wood/debarked/veryaged" }
+                    },
+                    "*": {
+                        "frame": { "base": "game:block/wood/planks/{wood}1" },
+                        "glass": { "base": "game:block/glass/{glass}" },
+                        "putty": { "base": "game:block/wood/debarked/{wood}" }
+                    }
+                }
+            }
+        }
+    ],
+    "entityBehaviors": [
+        { "name": "RotatablePlaceable" }, //Required for blocks that use the window storage library to allow the block to be rotated when placed
+        { "name": "AttributeRenderingLibrary.ShapeTexturesFromAttributes" } //Required to use ARL
+    ],
+
+    "creativeInventoryStacksByType": { //Required to use ARL
+        "*-closed": [ //Needed to only show the closed state of the window in the creative inventory
+            {
+                "tabs": [ "general", "decorative", "example1" ],
+                "stacks": [
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "oak",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "birch",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "pine",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "maple",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "acacia",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "kapok",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "baldcypress",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "larch",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "redwood",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "ebony",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "walnut",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "purpleheart",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "aged",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "veryaged",
+                                "glass": "leaded"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "oak",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "birch",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "pine",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "maple",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "acacia",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "kapok",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "baldcypress",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "larch",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "redwood",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "ebony",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "walnut",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "purpleheart",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "aged",
+                                "glass": "plain"
+                            }
+                        }
+                    },
+
+                    {
+                        "type": "block",
+                        "code": "example-{style}-{state}",
+                        "attributes": {
+                            "types": {
+                                "wood": "veryaged",
+                                "glass": "plain"
+                            }
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    "attributesByType": {
+
+        "*-example-*": {
+            "canOpen": true, //Required for blocks that use the window storage library to allow the block to be opened and closed
+            "animationShapePath": "example:shapes/block/example/animation/awningdisplay-animation.json", //Add your desired animation shape path here, should only contain the animated parts of the window
+            "slotGroups": [ //Add your desired slot groups here, max 3 groups
+                {
+                    "count": 5, //can be any number up to 7 max
+                    "spacing": 0.125, //can be any number, the spacing between slots
+                    "startOffset": -0.375, //can be any number, the offset of the first slot
+                    "zCenter": 0.281, //can be any number, the z center of the slots
+                    "yOffset": 0.00, //can be any number, the y offset of the slots
+                    "rotateY": 0 //can be any number, the rotation of the slots
+                },
+                {
+                    "count": 3,
+                    "spacing": 0.125,
+                    "startOffset": -0.375,
+                    "zCenter": -0.28,
+                    "yOffset": 0.00,
+                    "rotateY": 180
+                },
+                {
+                    "count": 5,
+                    "spacing": 0.125,
+                    "startOffset": -0.375,
+                    "zCenter": 0.281,
+                    "yOffset": 0.505,
+                    "rotateY": 0
+                }
+            ],
+            "frameBoxGroups": [ //one group per animated pane, can be as many as animations in the animation shape file
+                {
+                    "animOpen": "open", //required for animation to work, uses the code for the animation in the animation shape json file
+                    "animClose": "closed", //required for animation to work, uses the code for the animation in the animation shape json file
+                    "closedFrameBox": { //the frame box for the closed state, can be any size
+                        "x1": 0,
+                        "y1": 0,
+                        "z1": 0.4375,
+                        "x2": 1,
+                        "y2": 1,
+                        "z2": 0.5625
+                    },
+                    "openFrameBox": { //the frame box for the open state, can be any size
+                        "x1": 0,
+                        "y1": 0,
+                        "z1": 0.4375,
+                        "x2": 1,
+                        "y2": 1,
+                        "z2": 0.5625
+                    } //Counts as one group
+                },
+                {
+                    "animOpen": "opendisplay", //required for animation to work, uses the code for the animation in the animation shape json file
+                    "animClose": "closedisplay", //required for animation to work, uses the code for the animation in the animation shape json file
+                    "isWindow": false, //used to stop the animation from triggering the open/closed state of the window is true by default, set to false for non-window animations
+                    "closedFrameBox": { //the frame box for the closed state, can be any size
+                        "x1": 0.0625,
+                        "y1": 0.0,
+                        "z1": 0.9375,
+                        "x2": 0.9375,
+                        "y2": 0.5,
+                        "z2": 1.0
+                    },
+
+                    "openFrameBox": { //the frame box for the open state, can be any size
+                        "x1": 0.0625,
+                        "y1": 0.375,
+                        "z1": 0.9375,
+                        "x2": 0.9375,
+                        "y2": 0.875,
+                        "z2": 1.0
+                    } //Counts as one group
+
+                }
+            ],
+            "collisionBoxGroups": [ //one group per FrameBox, ideally should match the closed and open frame boxes
+                {
+                    "closedCollisionBox": { //the collision box for the closed state, can be any size
+                        "x1": 0,
+                        "y1": 0,
+                        "z1": 0.4375,
+                        "x2": 1,
+                        "y2": 1,
+                        "z2": 0.5625
+                    },
+                    "openCollisionBox": { //the collision box for the open state, can be any size
+                        "x1": 0,
+                        "y1": 0,
+                        "z1": 0.4375,
+                        "x2": 1,
+                        "y2": 1,
+                        "z2": 0.5625
+                    } //Counts as one group
+                },
+                {
+                    "closedCollisionBox": {
+                        "x1": 0.50,
+                        "y1": 0.00,
+                        "z1": 0.4375,
+                        "x2": 1.00,
+                        "y2": 1.00,
+                        "z2": 0.5625
+                    },
+                    "openCollisionBox": {
+                        "x1": 0.85,
+                        "y1": 0.5,
+                        "z1": 0.4375,
+                        "x2": 1.00,
+                        "y2": 1.00,
+                        "z2": 0.50
+                    } //Counts as one group
+                },
+                {
+                    "staticCollisionBoxes": [ //Add your desired amount of static collision boxes here can be any amount, used for static parts
+                        {
+                            "x1": 0.00,
+                            "y1": 0.875,
+                            "z1": 0.375,
+                            "x2": 1.00,
+                            "y2": 1.00,
+                            "z2": 0.625
+                        },
+                        {
+                            "x1": 0.00,
+                            "y1": 0.00,
+                            "z1": 0.375,
+                            "x2": 1.00,
+                            "y2": 0.125,
+                            "z2": 0.625
+                        },
+                        {
+                            "x1": 0.0,
+                            "y1": 0.0,
+                            "z1": 0.5625,
+                            "x2": 1.0,
+                            "y2": 0.5,
+                            "z2": 1.0
+                        }
+
+                    ]
+                }
+            ]
+        }
+    },
+
+    "attributes": {
+        "reinforcable": false,
+        "maxStackSize": 1,
+        "perishRateModifier": 1.0,
+        "handbookByType": {
+            "example-*-closed": {},
+            "*": { "exclude": true }
+        }
+
+    },
+    "heldTpIdleAnimation": "holdbothhands",
+    "drawtype": "json",
+    "blockmaterial": "Glass",
+    "renderpass": "opaque",
+    "replaceable": 900,
+    "resistance": 1.5,
+    "lightAbsorption": 0,
+    "sideSolidByType": { //used to determnine the block state so ambient rain when open and rain on window sound when closed
+        "*-closed": { "all": true },
+        "*-open": {
+            "north": false,
+            "south": false,
+            "east": false,
+            "west": false,
+            "up": true,
+            "down": true
+        }
+    },
+    "sideopaque": { "all": false },
+    "emitSideAo": { "all": false },
+    "sounds": {
+        "place": "game:player/buildhigh",
+        "break": "game:block/glass",
+        "hit": "game:block/glass",
+        "walk": "game:walk/wood"
+    },
+    "combustibleProps": {
+        "burnTemperature": 600,
+        "burnDuration": 35
+    },
+    "materialDensity": 400,
+    "guiTransform": {
+        "translation": {
+            "x": -1,
+            "y": -4,
+            "z": 0
+        },
+        "rotation": {
+            "x": -37,
+            "y": 150,
+            "z": 0
+        },
+        "origin": {
+            "x": 0.5,
+            "y": 0.5,
+            "z": 0.5
+        },
+        "scale": 1.29
+    },
+    "tpHandTransform": {
+        "translation": {
+            "x": -0.5,
+            "y": -1,
+            "z": -0.75
+        },
+        "rotation": {
+            "x": 30,
+            "y": 30,
+            "z": 20
+        },
+        "scale": 0.9
+    },
+    "fpHandTransform": {
+        "translation": {
+            "x": 0.08,
+            "y": -0.2,
+            "z": 0.6
+        },
+        "rotation": {
+            "x": 33,
+            "y": 134,
+            "z": -102
+        }
+    },
+    "groundTransformByType": {
+        "example-*shelf-closed": {
+            "translation": {
+                "x": 0,
+                "y": 0.05,
+                "z": 0
+            },
+            "rotation": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "origin": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0.5
+            },
+            "scale": 4.5
+        },
+        "*": {
+            "translation": {
+                "x": 0,
+                "y": 0.05,
+                "z": 0
+            },
+            "rotation": {
+                "x": -90,
+                "y": 0,
+                "z": 0
+            },
+            "origin": {
+                "x": 0.5,
+                "y": 0,
+                "z": 0.5
+            },
+            "scale": 4.5
+        }
+    },
+    "selectionBoxesByType": { //used to define the slots, the amount must match the slotGroup total so if a group has 21 then there needs to be 21 selection boxes defined here, should match the order the slot groups are in to get the right position
+
+        "*-example-*": [
+            { //slot group 1
+                "x1": 0.0625,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.1875,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.1875,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.3125,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.3125,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.4375,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.4375,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.5625,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.5625,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.6875,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.6875,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.8125,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.8125,
+                "y1": 0,
+                "z1": 0.9375,
+                "x2": 0.9375,
+                "y2": 0.1,
+                "z2": 0.625
+            },
+
+
+
+            { //slot group 2
+                "x1": 0.0625,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.1875,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            {
+                "x1": 0.1875,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.3125,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            {
+                "x1": 0.3125,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.4375,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            {
+                "x1": 0.4375,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.5625,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            {
+                "x1": 0.5625,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.6875,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            {
+                "x1": 0.6875,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.8125,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            {
+                "x1": 0.8125,
+                "y1": 0,
+                "z1": 0.00,
+                "x2": 0.9375,
+                "y2": 0.1,
+                "z2": 0.375
+            },
+            { //slot group 3
+                "x1": 0.0625,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.1875,
+                "y2": 0.60,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.1875,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.3125,
+                "y2": 0.60,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.3125,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.4375,
+                "y2": 0.60,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.4375,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.5625,
+                "y2": 0.60,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.5625,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.6875,
+                "y2": 0.60,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.6875,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.8125,
+                "y2": 0.60,
+                "z2": 0.625
+            },
+            {
+                "x1": 0.8125,
+                "y1": 0.50,
+                "z1": 0.9375,
+                "x2": 0.9375,
+                "y2": 0.60,
+                "z2": 0.625
+            }
+
+
+
+
+
+        ]
+
+    }
+}
