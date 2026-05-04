@@ -1,0 +1,23 @@
+Mod is designed to use a seperate animation shape to work with a static shape to get it to work properly - animation shape can contain multiple animations, limited to 2 per part and needs to be referenced in the JSON attributesByType
+
+Required: One entry per texture reference used in the shape
+AttributeRenderingLibrary will override these with the chosen material variant	
+"frame": "game:block/wood/planks/oak1", // fallback; AttributeRenderingLibrary will override with {wood}
+"glass": "game:block/glass/leaded", // fallback for {glass}
+"putty": "game:block/wood/debarked/oak"
+
+"animations":
+ 
+
+"name": "Open",
+"code": "open", used in animOpen, can be called anything
+"quantityframes": 30,
+"onActivityStopped": "EaseOut",
+"onAnimationEnd": "Hold", Required for the animated part to stay visible
+ 
+
+"name": "Closed",
+"code": "closed", used in animClosed, can be called anything
+"quantityframes": 30,
+"onActivityStopped": "EaseOut",
+"onAnimationEnd": "Hold", Required for the animated part to stay visible
