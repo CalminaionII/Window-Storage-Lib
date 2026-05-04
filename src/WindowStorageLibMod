@@ -1,0 +1,80 @@
+using Vintagestory.API.Client;
+using Vintagestory.API.Common;
+using Vintagestory.API.MathTools;
+using Vintagestory.API.Server;
+
+[assembly: ModInfo("Window Storage", "windowstoragelib",
+    Description = "Adds functional window storage blocks with animations and environmental sounds",
+    Authors = new[] { "Calminaion" })]
+
+namespace WindowStorageLib
+{
+    public class LinkedOpenPacket
+    {
+        public int[] Positions; // flat array: x,y,z per position
+        public bool IsOpen;
+    }
+
+    public class WindowStorageLibMod : ModSystem
+    {
+        public static IServerNetworkChannel ServerChannel;
+        public static IClientNetworkChannel ClientChannel;
+
+        public override void Start(ICoreAPI api)
+        {
+            base.Start(api);
+
+            WindowStorageLibConfig.Load(api);
+
+            api.Logger.Notification("[WindowStorageLib] Mod loaded successfully");
+            api.Logger.Debug("[WindowStorageLib] Config values:");
+            api.Logger.Debug("  Animation Speed: {0}", WindowStorageLibConfig.Current.AnimationSpeed);
+
+            api.RegisterBlockClass("BlockWindowStorageLib", typeof(BlockWindowStorageLib));
+            api.RegisterBlockEntityClass("BEWindowStorageLib", typeof(BEWindowStorageLib));
+        }
+
+        public override void StartServerSide(ICoreServerAPI api)
+        {
+            ServerChannel = api.Network.RegisterChannel("windowstoragelib-linkedopen")
+                .RegisterMessageType<LinkedOpenPacket>();
+        }
+
+        public override void StartClientSide(ICoreClientAPI api)
+        {
+            ClientChannel = api.Network.RegisterChannel("windowstoragelib-linkedopen")
+                .RegisterMessageType<LinkedOpenPacket>()
+                .SetMessageHandler<LinkedOpenPacket>(packet =>
+                {
+                    if (packet?.Positions == null) return;
+                    for (int i = 0; i + 2 < packet.Positions.Length; i += 3)
+                    {
+                        var pos = new BlockPos(packet.Positions[i], packet.Positions[i + 1], packet.Positions[i + 2]);
+                        if (api.World.BlockAccessor.GetBlockEntity(pos) is BEWindowStorageLib be)
+                        {
+                            if (be.animUtil == null) be.InitializeAnimationUtil();
+                            if (be.animUtil != null)
+                            {
+                                be.animUtil.StopAnimation("open");
+                                be.animUtil.StopAnimation("closed");
+                                be.animUtil.StartAnimation(new AnimationMetaData()
+                                {
+                                    Animation = packet.IsOpen ? "open" : "closed",
+                                    Code = packet.IsOpen ? "open" : "closed",
+                                    AnimationSpeed = WindowStorageLibConfig.Current.AnimationSpeed,
+                                    EaseInSpeed = WindowStorageLibConfig.Current.AnimationSpeed,
+                                    EaseOutSpeed = WindowStorageLibConfig.Current.AnimationSpeed
+                                });
+                                be.PlaySlideSound();
+                            }
+                        }
+                    }
+                });
+        }
+
+        public override void Dispose()
+        {
+            base.Dispose();
+        }
+    }
+}
