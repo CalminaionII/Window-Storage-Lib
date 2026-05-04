@@ -412,11 +412,23 @@
                         "z2": 1.0
                     } //Counts as one group
 
-                }
-            ],
-            "collisionBoxGroups": [ //one group per FrameBox, ideally should match the closed and open frame boxes
+                },
+				{
+					"staticFrameBoxes": [ For non animated parts - set as an array
+						{
+							"x1": 0.03125,
+							"y1": 0.09375,
+							"z1": 0.46875,
+							"x2": 0.96875,
+							"y2": 0.96875,
+							"z2": 0.53125
+						}
+					]
+				}
+			],
+            "collisionBoxGroups": [ //one group per FrameBox
                 {
-                    "closedCollisionBox": { //the collision box for the closed state, can be any size
+                    "closedCollisionBox": { //the collision box for the closed state should match the relevent frame box
                         "x1": 0,
                         "y1": 0,
                         "z1": 0.4375,
@@ -424,7 +436,7 @@
                         "y2": 1,
                         "z2": 0.5625
                     },
-                    "openCollisionBox": { //the collision box for the open state, can be any size
+                    "openCollisionBox": { //the collision box for the open state should match the relevent frame box
                         "x1": 0,
                         "y1": 0,
                         "z1": 0.4375,
@@ -452,7 +464,7 @@
                     } //Counts as one group
                 },
                 {
-                    "staticCollisionBoxes": [ //Add your desired amount of static collision boxes here can be any amount, used for static parts
+                    "staticCollisionBoxes": [ //Used for static parts, set as an array
                         {
                             "x1": 0.00,
                             "y1": 0.875,
