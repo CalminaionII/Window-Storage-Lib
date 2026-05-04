@@ -1,0 +1,13 @@
+{
+    "type": "code",
+    "modid": "windowstoragelib",
+    "name": "Window Storage Library",
+    "authors": [ "Calminaion" ],
+    "description": "Lib for Windows to have Slots, Sounds, Animation and Other Customization",
+    "version": "1.2.2",
+    "requiredOnClient": true,
+    "requiredOnServer": true,
+    "dependencies": {
+        "attributerenderinglibrary": "3.1.0"
+    }
+}
