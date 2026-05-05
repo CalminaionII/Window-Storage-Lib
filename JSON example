@@ -13,7 +13,7 @@
         }
     ],
     "shapeByType": {
-        "example": { "base": "example:block/example/static/example" } // Add your desired shape path here used for attributesByType and shapeByType, should only contain static parts can be any file path
+        "example": { "base": "example:block/example/static/example" } // Add your desired shape path here - should only contain static parts can be any file path
 
     },
     "shapeInventoryByType": {
@@ -43,7 +43,7 @@
         }
     ],
     "entityBehaviors": [
-        { "name": "RotatablePlaceable" }, //Required for blocks that use the window storage library to allow the block to be rotated when placed
+        { "name": "RotatablePlaceable" }, //Required for blocks that use the window storage library to allow the block to be rotated when placed alon with the slots and animations
         { "name": "AttributeRenderingLibrary.ShapeTexturesFromAttributes" } //Required to use ARL
     ],
 
@@ -342,7 +342,7 @@
 
         "*-example-*": {
             "canOpen": true, //Required for blocks that use the window storage library to allow the block to be opened and closed
-            "animationShapePath": "example:shapes/block/example/animation/awningdisplay-animation.json", //Add your desired animation shape path here, should only contain the animated parts of the window
+            "animationShapePath": "example:shapes/block/example/animation/awningdisplay-animation.json", //Add your desired animation shape path here, should only contain the animated parts of the block
             "slotGroups": [ //Add your desired slot groups here, max 3 groups
                 {
                     "count": 5, //can be any number up to 7 max
@@ -369,11 +369,11 @@
                     "rotateY": 0
                 }
             ],
-            "frameBoxGroups": [ //one group per animated pane, can be as many as animations in the animation shape file
+            "frameBoxGroups": [ //One group per animated part - 1 closed and 1 open - cannot be in an array
                 {
-                    "animOpen": "open", //required for animation to work, uses the code for the animation in the animation shape json file
-                    "animClose": "closed", //required for animation to work, uses the code for the animation in the animation shape json file
-                    "closedFrameBox": { //the frame box for the closed state, can be any size
+                    "animOpen": "open", //required for animation to work, uses the code for the animation in the  shape json file
+                    "animClose": "closed", //required for animation to work, uses the code for the animation in the shape json file
+                    "closedFrameBox": { //the frame box for the closed state, can be any size - tied to animOpen
                         "x1": 0,
                         "y1": 0,
                         "z1": 0.4375,
@@ -381,7 +381,7 @@
                         "y2": 1,
                         "z2": 0.5625
                     },
-                    "openFrameBox": { //the frame box for the open state, can be any size
+                    "openFrameBox": { //the frame box for the open state, can be any size - tied to animClosed
                         "x1": 0,
                         "y1": 0,
                         "z1": 0.4375,
@@ -391,10 +391,10 @@
                     } //Counts as one group
                 },
                 {
-                    "animOpen": "opendisplay", //required for animation to work, uses the code for the animation in the animation shape json file
-                    "animClose": "closedisplay", //required for animation to work, uses the code for the animation in the animation shape json file
-                    "isWindow": false, //used to stop the animation from triggering the open/closed state of the window is true by default, set to false for non-window animations
-                    "closedFrameBox": { //the frame box for the closed state, can be any size
+                    "animOpen": "opendisplay", //required for animation to work, uses the code for the animation that is in the animation shape json file
+                    "animClose": "closedisplay", //required for animation to work, uses the code for the animation that is in the animation shape json file
+                    "isWindow": false, //used to stop the animation from triggering the open/closed state of the block is true by default, set to false for non-window animations
+                    "closedFrameBox": { //the frame box for the closed state, can be any size - tied to animOpen
                         "x1": 0.0625,
                         "y1": 0.0,
                         "z1": 0.9375,
@@ -403,7 +403,7 @@
                         "z2": 1.0
                     },
 
-                    "openFrameBox": { //the frame box for the open state, can be any size
+                    "openFrameBox": { //the frame box for the open state, can be any size - tied to animClosed
                         "x1": 0.0625,
                         "y1": 0.375,
                         "z1": 0.9375,
@@ -414,7 +414,7 @@
 
                 },
 				{
-					"staticFrameBoxes": [ For non animated parts - set as an array
+					"staticFrameBoxes": [ For non animated parts - set as an array - must be at the end of all the open and closed groups
 						{
 							"x1": 0.03125,
 							"y1": 0.09375,
@@ -428,7 +428,7 @@
 			],
             "collisionBoxGroups": [ //one group per FrameBox
                 {
-                    "closedCollisionBox": { //the collision box for the closed state should match the relevent frame box
+                    "closedCollisionBox": { //the collision box for the closed state should match the relevent frame box size - not an array
                         "x1": 0,
                         "y1": 0,
                         "z1": 0.4375,
@@ -436,7 +436,7 @@
                         "y2": 1,
                         "z2": 0.5625
                     },
-                    "openCollisionBox": { //the collision box for the open state should match the relevent frame box
+                    "openCollisionBox": { //the collision box for the open state should match the relevent frame box size -  not an array
                         "x1": 0,
                         "y1": 0,
                         "z1": 0.4375,
