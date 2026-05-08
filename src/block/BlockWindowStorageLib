@@ -115,7 +115,7 @@ namespace WindowStorageLib
                         if (!isWindow)
                         {
                             world.PlaySoundAt(
-                                new AssetLocation("sounds/block/door"),
+                                new AssetLocation("game", "sounds/block/door"),
                                 blockSel.Position.X + 0.5f,
                                 blockSel.Position.Y + 0.5f,
                                 blockSel.Position.Z + 0.5f,
@@ -230,7 +230,7 @@ namespace WindowStorageLib
             }
 
             be.MarkDirty(true);
-            world.PlaySoundAt(new AssetLocation("sounds/block/cloth.ogg"), blockSel.Position, 0, byPlayer);
+            world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"), blockSel.Position, 0, byPlayer);
             return true;
         }
 
@@ -245,7 +245,7 @@ namespace WindowStorageLib
             be.rotations[slotIndex] = (be.rotations[slotIndex] + step * direction + 360f) % 360f;
             be.MarkDirty(true);
 
-            world.PlaySoundAt(new AssetLocation("sounds/block/cloth.ogg"),
+            world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"),
                 blockSel.Position.X + 0.5f, blockSel.Position.Y + 0.5f, blockSel.Position.Z + 0.5f,
                 byPlayer, randomizePitch: true, range: 16f, volume: 0.8f);
             return true;
@@ -270,7 +270,7 @@ namespace WindowStorageLib
             be.depths[slotIndex] = next;
             be.MarkDirty(true);
 
-            world.PlaySoundAt(new AssetLocation("sounds/block/cloth.ogg"),
+            world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"),
                 blockSel.Position.X + 0.5f, blockSel.Position.Y + 0.5f, blockSel.Position.Z + 0.5f,
                 byPlayer, randomizePitch: true, range: 16f, volume: 0.6f);
             return true;
