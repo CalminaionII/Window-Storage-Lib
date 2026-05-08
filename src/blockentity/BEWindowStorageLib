@@ -54,6 +54,7 @@ namespace WindowStorageLib
         private long clientTickListener;
         private EventBusListenerDelegate eventBusListener;
         internal bool[] paneStates = new bool[10];
+        private bool _disposed = false;
 
         public FrameBoxGroup[] FrameBoxGroups { get; private set; }
 
@@ -167,7 +168,7 @@ namespace WindowStorageLib
         {
             if (capi == null) return;
             capi.World.PlaySoundAt(
-                new AssetLocation("game", "sounds/effect/swoosh.ogg"),
+                new AssetLocation("game", "sounds/effect/swoosh"),
                 Pos.X + 0.5f, Pos.Y + 0.5f, Pos.Z + 0.5f,
                 null, randomizePitch: true, range: 16f, volume: 0.8f
             );
@@ -310,14 +311,14 @@ namespace WindowStorageLib
             blockMeshRef = null;
             blockMesh = null;
 
-            InitializeAnimationUtil();
-
-            if (animUtil != null)
+            capi?.Event.EnqueueMainThreadTask(() =>
             {
-                UpdateAnimations(true);     // ← Changed to generic
-            }
-
-            MarkMeshesDirty();
+                if (_disposed) return;
+                InitializeAnimationUtil();
+                if (animUtil != null)
+                    UpdateAnimations(true);
+                MarkMeshesDirty();
+            }, "windowstoragelib-initanim");
         }
 
         private bool PlayerNearThisWindow(float range)
@@ -398,7 +399,7 @@ namespace WindowStorageLib
 
             ILoadedSound newSound = capi.World.LoadSound(new SoundParams()
             {
-                Location = new AssetLocation("game:sounds/environment/rainwindow.ogg"),
+                Location = new AssetLocation("game", "sounds/environment/rainwindow"),
                 ShouldLoop = true,
                 Position = capi.World.Player.Entity.Pos.XYZFloat,
                 DisposeOnFinish = false,
@@ -429,6 +430,7 @@ namespace WindowStorageLib
 
         public override void Initialize(ICoreAPI api)
         {
+            _disposed = false;  // ← add this line
             if (Block == null || Block.Id == 0)
             {
                 if (api.Side == EnumAppSide.Client && api is ICoreClientAPI clientApi)
@@ -568,18 +570,22 @@ namespace WindowStorageLib
                     });
                 }
 
-                InitializeAnimationUtil();
-                if (animUtil != null)
+                capi?.Event.EnqueueMainThreadTask(() =>
                 {
-                    // Sets the global block variant animation[cite: 2]
-                    string globalState = IsAnyWindowPaneOpen ? "open" : "closed";
-                    animUtil.StartAnimation(new AnimationMetaData()
+                    if (_disposed) return;
+                    InitializeAnimationUtil();
+                    if (animUtil != null)
                     {
-                        Animation = globalState,
-                        Code = globalState,
-                        AnimationSpeed = 1000f // Instant snap on init
-                    });
-                }
+                        string globalState = IsAnyWindowPaneOpen ? "open" : "closed";
+                        animUtil.StartAnimation(new AnimationMetaData()
+                        {
+                            Animation = globalState,
+                            Code = globalState,
+                            AnimationSpeed = 1000f
+                        });
+                    }
+                    MarkMeshesDirty();
+                }, "windowstoragelib-initanim");
 
                 if (clientTickListener != 0)
                 {
@@ -595,8 +601,6 @@ namespace WindowStorageLib
                 }
                 eventBusListener = OnEventBusEvent;
                 api.Event.RegisterEventBusListener(eventBusListener);
-
-                MarkMeshesDirty();
             }
         }
 
@@ -907,21 +911,26 @@ namespace WindowStorageLib
             // 5. Client-Side Visuals and Animations[cite: 2]
             if (Api?.Side == EnumAppSide.Client)
             {
-                bool angleChanged = Math.Abs(MeshAngleRad - previousAngle) > 0.001f;
-                if (angleChanged) InitializeAnimationUtil();
-
-                if (animUtil != null)
+                capi?.Event.EnqueueMainThreadTask(() =>
                 {
-                    animUtil.StopAnimation("open");
-                    animUtil.StopAnimation("closed");
+                    if (_disposed) return;
 
-                    UpdateAnimations(true);
-                    if (oldPaneStates != null && oldPaneStates
-                        .Where((s, i) => i < paneStates.Length && s != paneStates[i])
-                        .Any()) PlaySlideSound();  // ← removed the stray line below this
-                }
-                MarkMeshesDirty();
-                FadeSharedSoundsToCurrentTarget();
+                    bool angleChanged = Math.Abs(MeshAngleRad - previousAngle) > 0.001f;
+                    if (angleChanged) InitializeAnimationUtil();
+
+                    if (animUtil != null)
+                    {
+                        animUtil.StopAnimation("open");
+                        animUtil.StopAnimation("closed");
+
+                        UpdateAnimations(true);
+                        if (oldPaneStates != null && oldPaneStates
+                            .Where((s, i) => i < paneStates.Length && s != paneStates[i])
+                            .Any()) PlaySlideSound();
+                    }
+                    MarkMeshesDirty();
+                    FadeSharedSoundsToCurrentTarget();
+                }, "windowstoragelib-fromtree");
             }
         }
         public override void ToTreeAttributes(ITreeAttribute tree)
@@ -940,6 +949,7 @@ namespace WindowStorageLib
 
         private void CleanupClient()
         {
+            _disposed = true;
             blockMeshRef?.Dispose();
             blockMeshRef = null;
             blockMesh = null;
@@ -1258,36 +1268,39 @@ namespace WindowStorageLib
         {
             if (capi == null) return;
 
-            blockMeshRef?.Dispose();
-            blockMeshRef = null;
-
-            var arlBlockBehavior = Block?.GetBehavior<BlockBehaviorShapeTexturesFromAttributes>();
-            var arlBeBehavior = this.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
-
-            if (arlBlockBehavior != null && arlBeBehavior != null)
+            capi.Event.EnqueueMainThreadTask(() =>
             {
-                // Get the shape from attributes or fall back to the block's default shape
-                CompositeShape cshape = Block.Attributes?["shape"].AsObject<CompositeShape>() ?? Block.Shape;
+                if (_disposed) return;
 
-                // Use the new method signature to avoid the obsolete warning
-                blockMesh = arlBlockBehavior.GetOrCreateMesh(
-                    arlBeBehavior.Variants,
-                    cshape,
-                    Pos,
-                    null,
-                    null
-                )?.Clone();
-            }
-            else
-            {
-                capi.Tesselator.TesselateBlock(Block, out blockMesh);
-            }
+                blockMeshRef?.Dispose();
+                blockMeshRef = null;
 
-            if (blockMesh != null && MeshAngleRad != 0f)
-                blockMesh = blockMesh.Rotate(new Vec3f(0.5f, 0.0f, 0.5f), 0f, MeshAngleRad, 0f);
+                var arlBlockBehavior = Block?.GetBehavior<BlockBehaviorShapeTexturesFromAttributes>();
+                var arlBeBehavior = this.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
 
-            if (blockMesh != null)
-                blockMeshRef = capi.Render.UploadMesh(blockMesh);
+                if (arlBlockBehavior != null && arlBeBehavior != null)
+                {
+                    CompositeShape cshape = Block.Attributes?["shape"].AsObject<CompositeShape>() ?? Block.Shape;
+                    blockMesh = arlBlockBehavior.GetOrCreateMesh(
+                        arlBeBehavior.Variants,
+                        cshape,
+                        Pos,
+                        null,
+                        null
+                    )?.Clone();
+                }
+                else
+                {
+                    capi.Tesselator.TesselateBlock(Block, out blockMesh);
+                }
+
+                if (blockMesh != null && MeshAngleRad != 0f)
+                    blockMesh = blockMesh.Rotate(new Vec3f(0.5f, 0.0f, 0.5f), 0f, MeshAngleRad, 0f);
+
+                if (blockMesh != null)
+                    blockMeshRef = capi.Render.UploadMesh(blockMesh);
+
+            }, "windowstoragelib-uploadmesh");
         }
 
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
@@ -1443,6 +1456,7 @@ namespace WindowStorageLib
 
         public bool TryPut(ItemSlot slot, BlockSelection blockSel)
         {
+            if (blockSel == null) return false;
             int index = blockSel.SelectionBoxIndex;
             if (index < 0 || index >= slotCount) return false;
             if (IsGroupStacked(GetGroupForSlot(index))) return false;
@@ -1452,7 +1466,7 @@ namespace WindowStorageLib
             if (moved > 0)
             {
                 MarkDirty(true);
-                Api.World.PlaySoundAt(new AssetLocation("sounds/player/build"), Pos.X + 0.5, Pos.Y + 0.5, Pos.Z + 0.5, null, randomizePitch: true, range: 16);
+                Api.World.PlaySoundAt(new AssetLocation("game", "sounds/player/build"), Pos.X + 0.5, Pos.Y + 0.5, Pos.Z + 0.5, null, randomizePitch: true, range: 16);
                 return true;
             }
             return false;
@@ -1460,6 +1474,7 @@ namespace WindowStorageLib
 
         public bool TryTake(IPlayer byPlayer, BlockSelection blockSel)
         {
+            if (blockSel == null) return false;
             int index = blockSel.SelectionBoxIndex;
             if (index < 0 || index >= slotCount) return false;
             if (IsGroupStacked(GetGroupForSlot(index))) return false;
@@ -1469,7 +1484,7 @@ namespace WindowStorageLib
             if (byPlayer.InventoryManager.TryGiveItemstack(stack))
             {
                 MarkDirty(true);
-                Api.World.PlaySoundAt(new AssetLocation("sounds/player/build"), Pos.X + 0.5, Pos.Y + 0.5, Pos.Z + 0.5, null, randomizePitch: true, range: 16);
+                Api.World.PlaySoundAt(new AssetLocation("game", "sounds/player/build"), Pos.X + 0.5, Pos.Y + 0.5, Pos.Z + 0.5, null, randomizePitch: true, range: 16);
                 return true;
             }
             sourceSlot.Itemstack = stack;
