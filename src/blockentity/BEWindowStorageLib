@@ -52,6 +52,7 @@ namespace WindowStorageLib
     public class BEWindowStorageLib : BlockEntityDisplay
     {
         private long clientTickListener;
+        private long serverTickListener;
         private EventBusListenerDelegate eventBusListener;
         internal bool[] paneStates = new bool[10];
         private bool _disposed = false;
@@ -73,6 +74,7 @@ namespace WindowStorageLib
         private int cachedSlotStartIndex;
         private int[] cachedFrameStartIndex;
         private int[] cachedFrameCounts;
+        private CollisionBoxGroup[] cachedCollisionGroups;
 
         private static readonly Dictionary<string, (BlockPos owner, ILoadedSound sound)> SharedSounds = new();
 
@@ -461,7 +463,7 @@ namespace WindowStorageLib
                 }
                 else newSlotCount = 7;
             }
-            newSlotCount = Math.Clamp(newSlotCount, 1, 64);
+            newSlotCount = Math.Clamp(newSlotCount, 0, 64);
 
             if (inv == null)
             {
@@ -514,6 +516,7 @@ namespace WindowStorageLib
             // 2. NEW: Handle Separated Window Pane States
             // This looks at "frameBoxGroups" in your JSON to decide how many panes we have
             FrameBoxGroups = Block?.Attributes?["frameBoxGroups"].AsObject<FrameBoxGroup[]>();
+            cachedCollisionGroups = Block?.Attributes?["collisionBoxGroups"]?.AsObject<CollisionBoxGroup[]>();
 
             int paneCount = FrameBoxGroups?.Length ?? 0;
 
@@ -555,7 +558,14 @@ namespace WindowStorageLib
 
             container.Init(api, () => Pos, () => MarkDirty(true));
             if (api.Side == EnumAppSide.Server)
-                RegisterGameTickListener((_) => container.OnTick(0), 10000);
+            {
+                if (serverTickListener != 0)
+                {
+                    UnregisterGameTickListener(serverTickListener);
+                    serverTickListener = 0;
+                }
+                serverTickListener = RegisterGameTickListener((_) => container.OnTick(0), 10000);
+            }
 
             UpdateLightCache();
 
@@ -972,9 +982,9 @@ namespace WindowStorageLib
                 clientTickListener = 0;
             }
 
-            if (eventBusListener != null && capi != null)
+            if (eventBusListener != null && Api != null)
             {
-                capi.Event.UnregisterEventBusListener(eventBusListener);
+                Api.Event.UnregisterEventBusListener(eventBusListener);
                 eventBusListener = null;
             }
 
@@ -987,34 +997,72 @@ namespace WindowStorageLib
 
         public override void OnBlockRemoved()
         {
-            CleanupClient();
-            base.OnBlockRemoved();
+            _blockBroken = true;
+            ++_lightUpdateGeneration;
+
+            if (Api?.Side == EnumAppSide.Server && _lastKnownLightHsv != null)
+                Api.World.BlockAccessor.RemoveBlockLight(_lastKnownLightHsv, Pos);
+
             if (inv != null)
             {
                 inv.OnAcquireTransitionSpeed -= Inventory_OnAcquireTransitionSpeed;
                 inv.SlotModified -= OnSlotModified;
                 inv.Clear();
             }
+            if (serverTickListener != 0)
+            {
+                UnregisterGameTickListener(serverTickListener);
+                serverTickListener = 0;
+            }
+
+            CleanupClient();
+            base.OnBlockRemoved(); // once, at the end
         }
 
         public override void OnBlockUnloaded()
         {
-            CleanupClient();
-            base.OnBlockUnloaded();
             if (inv != null)
             {
                 inv.OnAcquireTransitionSpeed -= Inventory_OnAcquireTransitionSpeed;
                 inv.SlotModified -= OnSlotModified;
             }
+            if (serverTickListener != 0)
+            {
+                UnregisterGameTickListener(serverTickListener);
+                serverTickListener = 0;
+            }
+
+            CleanupClient();
+            base.OnBlockUnloaded(); // once, at the end
         }
 
+
+
         public override void GetBlockInfo(IPlayer forPlayer, StringBuilder dsc)
+
+
+
         {
+            if (Block?.Attributes?["pairedWith"].AsString(null) == "below")
+            {
+                // Route to bottom BE instead
+                BlockPos belowPos = Pos.DownCopy();
+                while (Api.World.BlockAccessor.GetBlockEntity(belowPos) is BEWindowStorageLib belowBe &&
+                       belowBe.Block?.Attributes?["pairedWith"].AsString(null) == "below")
+                {
+                    belowPos = belowPos.DownCopy();
+                }
+
+                if (Api.World.BlockAccessor.GetBlockEntity(belowPos) is BEWindowStorageLib bottomBe)
+                    bottomBe.GetBlockInfo(forPlayer, dsc);
+                return;
+            }
+
             string styleDisplay = windowStyle.Length > 0 ? char.ToUpper(windowStyle[0]) + windowStyle.Substring(1) : windowStyle;
             if (CanOpen)
             {
                 string state = IsAnyWindowPaneOpen ? Lang.Get("Open") : Lang.Get("Closed");
-                dsc.AppendLine(Lang.Get("{0}: {1}", styleDisplay, state));
+                dsc.AppendLine(state);
             }
             else
             {
@@ -1076,7 +1124,7 @@ namespace WindowStorageLib
             if (ripenRate > 0f)
                 dsc.AppendLine(Lang.Get("Suitable spot for food ripening."));
 
-            if (forPlayer?.CurrentBlockSelection != null)
+            if (forPlayer?.CurrentBlockSelection != null && forPlayer.CurrentBlockSelection.Position == Pos)
             {
                 int slotIndex = forPlayer.CurrentBlockSelection.SelectionBoxIndex;
                 if (slotIndex >= 0 && slotIndex < inv.Count)
@@ -1401,7 +1449,7 @@ namespace WindowStorageLib
             List<Cuboidf> result = new List<Cuboidf>();
 
             // 2. Try per‑pane collision groups
-            var collisionGroups = Block?.Attributes?["collisionBoxGroups"]?.AsObject<CollisionBoxGroup[]>();
+            var collisionGroups = cachedCollisionGroups;
             if (collisionGroups != null)
             {
                 for (int i = 0; i < collisionGroups.Length; i++)
