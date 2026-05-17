@@ -1,0 +1,368 @@
+"*-tallcasementtop3-*": {
+    "canOpen": true,
+    "linkedOpen": true, //used to sync animations between blocks
+    "pairedWith": "below", //used to detect blocks below
+    "animationShapePath": "windowstorage:shapes/block/windowstorage/animation/tall-windows/tallcasementtop-animation.json",
+    "slotGroups": [
+        {
+            "count": 0,
+            "spacing": 0.125,
+            "startOffset": -0.375,
+            "zCenter": 0.281,
+            "yOffset": 0.0,
+            "rotateY": 0
+        }
+    ],
+    "frameBoxGroups": [
+        {
+            "animOpen": "leftopen",
+            "animClose": "leftclosed",
+            "closedFrameBox": {
+                "x1": 0.03125,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.5,
+                "y2": 0.96875,
+                "z2": 0.53125
+            },
+            "openFrameBox": {
+                "x1": 0.0625,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.125,
+                "y2": 0.96875,
+                "z2": 0.5625
+            }
+        },
+        {
+            "animOpen": "rightopen",
+            "animClose": "rightclosed",
+            "closedFrameBox": {
+                "x1": 0.5,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.96875,
+                "y2": 0.96875,
+                "z2": 0.53125
+            },
+            "openFrameBox": {
+                "x1": 0.875,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.9375,
+                "y2": 0.96875,
+                "z2": 0.5625
+            }
+        }
+    ],
+    "collisionBoxGroups": [
+        {
+            "closedCollisionBox": {
+                "x1": 0.03125,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.5,
+                "y2": 0.96875,
+                "z2": 0.53125
+            },
+            "openCollisionBox": {
+                "x1": 0.0625,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.125,
+                "y2": 0.96875,
+                "z2": 0.5625
+            }
+        },
+        {
+            "closedCollisionBox": {
+                "x1": 0.5,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.96875,
+                "y2": 0.96875,
+                "z2": 0.53125
+            },
+            "openCollisionBox": {
+                "x1": 0.875,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.9375,
+                "y2": 0.96875,
+                "z2": 0.5625
+            }
+        },
+        {
+            "staticCollisionBoxes": [
+                {
+                    "x1": 0.0,
+                    "y1": 0.96875,
+                    "z1": 0.4375,
+                    "x2": 1.0,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                },
+                {
+                    "x1": 0.96875,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 1.0,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                },
+                {
+                    "x1": 0.0,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 0.03125,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                }
+            ]
+        }
+    ]
+},
+"*-tallcasementmiddle3-*": {
+    "canOpen": true,
+    "linkedOpen": true,
+    "placeWith": "windowstorage:windowstorage-tallcasementtop3-closed",  //used to select which block will be placed above
+    "pairedWith": "below", //used to detect blocks below
+    "animationShapePath": "windowstorage:shapes/block/windowstorage/animation/tall-windows/tallcasementmiddle-animation.json",
+    "slotGroups": [
+        {
+            "count": 0,
+            "spacing": 0.125,
+            "startOffset": -0.375,
+            "zCenter": 0.281,
+            "yOffset": 0.0,
+            "rotateY": 0
+        }
+    ],
+    "frameBoxGroups": [
+        {
+            "animOpen": "leftopen",
+            "animClose": "leftclosed",
+            "closedFrameBox": {
+                "x1": 0.03125,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.5,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openFrameBox": {
+                "x1": 0.0625,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.125,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        },
+        {
+            "animOpen": "rightopen",
+            "animClose": "rightclosed",
+            "closedFrameBox": {
+                "x1": 0.5,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.96875,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openFrameBox": {
+                "x1": 0.875,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.9375,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        }
+    ],
+    "collisionBoxGroups": [
+        {
+            "closedCollisionBox": {
+                "x1": 0.03125,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.5,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openCollisionBox": {
+                "x1": 0.0625,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.125,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        },
+        {
+            "closedCollisionBox": {
+                "x1": 0.5,
+                "y1": 0.0,
+                "z1": 0.46875,
+                "x2": 0.96875,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openCollisionBox": {
+                "x1": 0.875,
+                "y1": 0.0,
+                "z1": 0.09375,
+                "x2": 0.9375,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        },
+        {
+            "staticCollisionBoxes": [
+
+                {
+                    "x1": 0.96875,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 1.0,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                },
+
+                {
+                    "x1": 0.0,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 0.03125,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                }
+            ]
+        }
+    ]
+},
+
+"*-tallcasementbottom3-*": {
+    "canOpen": true,
+    "linkedOpen": true,
+    "placeWith": "windowstorage:windowstorage-tallcasementmiddle3-closed", //used to select which block will be placed above
+    "animationShapePath": "windowstorage:shapes/block/windowstorage/animation/tall-windows/tallcasementbottom-animation.json",
+    "slotGroups": [
+        {
+            "count": 7,
+            "spacing": 0.125,
+            "startOffset": -0.375,
+            "zCenter": 0.281,
+            "yOffset": 0.0,
+            "rotateY": 0
+        }
+    ],
+    "frameBoxGroups": [
+        {
+            "animOpen": "leftopen",
+            "animClose": "leftclosed",
+            "closedFrameBox": {
+                "x1": 0.03125,
+                "y1": 0.03125,
+                "z1": 0.46875,
+                "x2": 0.5,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openFrameBox": {
+                "x1": 0.0625,
+                "y1": 0.03125,
+                "z1": 0.09375,
+                "x2": 0.125,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        },
+        {
+            "animOpen": "rightopen",
+            "animClose": "rightclosed",
+            "closedFrameBox": {
+                "x1": 0.5,
+                "y1": 0.03125,
+                "z1": 0.46875,
+                "x2": 0.96875,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openFrameBox": {
+                "x1": 0.875,
+                "y1": 0.03125,
+                "z1": 0.09375,
+                "x2": 0.9375,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        }
+    ],
+    "collisionBoxGroups": [
+        {
+            "closedCollisionBox": {
+                "x1": 0.03125,
+                "y1": 0.03125,
+                "z1": 0.46875,
+                "x2": 0.5,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openCollisionBox": {
+                "x1": 0.0625,
+                "y1": 0.03125,
+                "z1": 0.09375,
+                "x2": 0.125,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        },
+        {
+            "closedCollisionBox": {
+                "x1": 0.5,
+                "y1": 0.03125,
+                "z1": 0.46875,
+                "x2": 0.96875,
+                "y2": 1.0,
+                "z2": 0.53125
+            },
+            "openCollisionBox": {
+                "x1": 0.875,
+                "y1": 0.03125,
+                "z1": 0.09375,
+                "x2": 0.9375,
+                "y2": 1.0,
+                "z2": 0.5625
+            }
+        },
+        {
+            "staticCollisionBoxes": [
+                {
+                    "x1": 0.96875,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 1.0,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                },
+                {
+                    "x1": 0.0,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 1.0,
+                    "y2": 0.03125,
+                    "z2": 0.5625
+                },
+                {
+                    "x1": 0.0,
+                    "y1": 0.0,
+                    "z1": 0.4375,
+                    "x2": 0.03125,
+                    "y2": 1.0,
+                    "z2": 0.5625
+                }
+            ]
+        }
+    ]
+},
