@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AttributeRenderingLibrary;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
@@ -8,13 +9,41 @@ using Vintagestory.GameContent;
 
 namespace WindowStorageLib
 {
-    public class BlockWindowStorageLib : Block
+    public class BlockWindowStorageLib : Block, IMultiblockOffset
     {
 
         public override bool DoPartialSelection(IWorldAccessor world, BlockPos pos) => true;
 
         public override bool TryPlaceBlock(IWorldAccessor world, IPlayer byPlayer, ItemStack itemstack, BlockSelection blockSel, ref string failureCode)
         {
+            // Check for paired block first before placing anything
+            string placeWithCode = Attributes?["placeWith"].AsString(null);
+            if (placeWithCode != null)
+            {
+                BlockPos checkPos = blockSel.Position;
+                string checkCode = placeWithCode;
+
+                while (checkCode != null)
+                {
+                    Block checkBlock = world.GetBlock(new AssetLocation(checkCode));
+                    if (checkBlock == null)
+                    {
+                        failureCode = "nosuchblock";
+                        return false;
+                    }
+
+                    BlockPos checkAbove = checkPos.UpCopy();
+                    if (!world.BlockAccessor.GetBlock(checkAbove).IsReplacableBy(checkBlock))
+                    {
+                        failureCode = "notenoughroom";
+                        return false;
+                    }
+
+                    checkPos = checkAbove;
+                    checkCode = checkBlock.Attributes?["placeWith"].AsString(null);
+                }
+            }
+
             Block closedBlock = world.GetBlock(CodeWithVariant("state", "closed"));
             ItemStack closedStack;
             if (closedBlock != null && closedBlock != this)
@@ -52,9 +81,109 @@ namespace WindowStorageLib
                     be.MarkDirty(true);
                 else
                     be.InitializeWithAngle();
+
+                // Place the paired block if defined
+                // Place the paired block(s) if defined, chaining for 3-high etc
+                if (placeWithCode != null)
+                {
+                    BlockPos currentPos = blockSel.Position;
+                    string nextCode = placeWithCode;
+
+                    while (nextCode != null)
+                    {
+                        Block nextBlock = world.GetBlock(new AssetLocation(nextCode));
+                        if (nextBlock == null) break;
+
+                        BlockPos nextPos = currentPos.UpCopy();
+                        Block nextClosed = world.GetBlock(nextBlock.CodeWithVariant("state", "closed")) ?? nextBlock;
+                        world.BlockAccessor.SetBlock(nextClosed.Id, nextPos);
+
+                        if (world.BlockAccessor.GetBlockEntity(nextPos) is BEWindowStorageLib nextBe)
+                        {
+                            nextBe.MeshAngleRad = angle;
+                            nextBe.blockMesh = null;
+
+                            var nextArlBehavior = nextBe.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
+                            var origArlBehavior = be.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
+                            if (nextArlBehavior != null && origArlBehavior != null)
+                            {
+                                ITreeAttribute tree = new TreeAttribute();
+                                origArlBehavior.ToTreeAttributes(tree);
+                                nextArlBehavior.FromTreeAttributes(tree, world);
+                            }
+
+                            if (world.Side == EnumAppSide.Server)
+                                nextBe.MarkDirty(true);
+                            else
+                                nextBe.InitializeWithAngle();
+                        }
+
+                        currentPos = nextPos;
+                        nextCode = nextBlock.Attributes?["placeWith"].AsString(null);
+                    }
+                }
             }
 
             return true;
+        }
+        public override void OnBlockBroken(IWorldAccessor world, BlockPos pos, IPlayer byPlayer, float dropQuantityMultiplier = 1f)
+        {
+            string pairedAboveCode = Attributes?["placeWith"].AsString(null);
+            string pairedDirection = Attributes?["pairedWith"].AsString(null);
+
+            // Remove all paired blocks above (bottom or middle broken)
+            if (pairedAboveCode != null)
+            {
+                BlockPos currentPos = pos.UpCopy();
+                while (true)
+                {
+                    Block currentBlock = world.BlockAccessor.GetBlock(currentPos);
+                    if (currentBlock is not BlockWindowStorageLib) break;
+
+                    string nextCode = currentBlock.Attributes?["placeWith"].AsString(null);
+                    world.BlockAccessor.SetBlock(0, currentPos);
+                    world.BlockAccessor.RemoveBlockEntity(currentPos);
+                    world.BlockAccessor.TriggerNeighbourBlockUpdate(currentPos);
+
+                    if (nextCode == null) break;
+                    currentPos = currentPos.UpCopy();
+                }
+            }
+
+            // Remove all paired blocks below (top or middle broken)
+            if (pairedDirection == "below")
+            {
+                BlockPos currentPos = pos.DownCopy();
+                while (true)
+                {
+                    Block currentBlock = world.BlockAccessor.GetBlock(currentPos);
+                    if (currentBlock is not BlockWindowStorageLib) break;
+
+                    string prevDirection = currentBlock.Attributes?["pairedWith"].AsString(null);
+                    bool isBottom = prevDirection == null; // bottom block has no pairedWith
+
+                    if (isBottom)
+                    {
+                        // Drop item from bottom block then remove
+                        ItemStack[] drops = currentBlock.GetDrops(world, currentPos, byPlayer, dropQuantityMultiplier);
+                        if (drops != null)
+                            foreach (var drop in drops)
+                                world.SpawnItemEntity(drop, currentPos.ToVec3d().Add(0.5, 0.5, 0.5));
+
+                        world.BlockAccessor.SetBlock(0, currentPos);
+                        world.BlockAccessor.RemoveBlockEntity(currentPos);
+                        world.BlockAccessor.TriggerNeighbourBlockUpdate(currentPos);
+                        break;
+                    }
+
+                    world.BlockAccessor.SetBlock(0, currentPos);
+                    world.BlockAccessor.RemoveBlockEntity(currentPos);
+                    world.BlockAccessor.TriggerNeighbourBlockUpdate(currentPos);
+                    currentPos = currentPos.DownCopy();
+                }
+            }
+
+            base.OnBlockBroken(world, pos, byPlayer, dropQuantityMultiplier);
         }
 
         public override Cuboidf[] GetSelectionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
@@ -81,18 +210,43 @@ namespace WindowStorageLib
         }
 
         public override bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
-{
-    if (blockSel == null || world == null) return false;
-    if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is not BEWindowStorageLib windowBe)
-        return false;
+        {
+            // If this is a top paired block, route all interaction to the bottom BE
+            if (Attributes?["pairedWith"].AsString(null) == "below")
+            {
+                // Walk down until we find the bottom block (no pairedWith)
+                BlockPos currentPos = blockSel.Position.DownCopy();
+                while (true)
+                {
+                    Block currentBlock = world.BlockAccessor.GetBlock(currentPos);
+                    if (currentBlock is not BlockWindowStorageLib) break;
+                    if (currentBlock.Attributes?["pairedWith"].AsString(null) != "below") break;
+                    currentPos = currentPos.DownCopy();
+                }
 
-    int clickedIndex = blockSel.SelectionBoxIndex;
-    ItemSlot handSlot = byPlayer.InventoryManager.ActiveHotbarSlot;
+                Block belowBlock = world.BlockAccessor.GetBlock(currentPos);
+                if (belowBlock is BlockWindowStorageLib &&
+                    world.BlockAccessor.GetBlockEntity(currentPos) is BEWindowStorageLib belowBe)
+                {
+                    BlockSelection routedSel = blockSel.Clone();
+                    routedSel.Position = currentPos;
+                    routedSel.SelectionBoxIndex = blockSel.SelectionBoxIndex + belowBe.Inventory.Count;
+                    return belowBlock.OnBlockInteractStart(world, byPlayer, routedSel);
+                }
+                return false;
+            }
 
-    var ctl = byPlayer.Entity.Controls;
-    bool isSneak = ctl.Sneak || ctl.ShiftKey;
-    bool isSprint = ctl.Sprint || ctl.CtrlKey;
-    bool isWrench = handSlot?.Itemstack?.Collectible?.Code?.Path?.Contains("wrench") == true;
+            // Existing interaction logic for bottom/normal blocks
+            if (blockSel == null || world == null) return false;
+            if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is not BEWindowStorageLib windowBe)
+                return false;
+            int clickedIndex = blockSel.SelectionBoxIndex;
+            ItemSlot handSlot = byPlayer.InventoryManager.ActiveHotbarSlot;
+
+            var ctl = byPlayer.Entity.Controls;
+            bool isSneak = ctl.Sneak || ctl.ShiftKey;
+            bool isSprint = ctl.Sprint || ctl.CtrlKey;
+            bool isWrench = handSlot?.Itemstack?.Collectible?.Code?.Path?.Contains("wrench") == true;
 
             // 1. FRAME SELECTION BOX
             if (clickedIndex >= windowBe.Inventory.Count)
@@ -315,6 +469,11 @@ namespace WindowStorageLib
         }
         public override ItemStack[] GetDrops(IWorldAccessor world, BlockPos pos, IPlayer byPlayer, float dropQuantityMultiplier = 1f)
         {
+            // Top block returns no drops, bottom block handles the drop
+            if (Attributes?["pairedWith"].AsString(null) == "below")
+                return Array.Empty<ItemStack>();
+
+            // Existing bottom block drop logic
             Block closedBlock = world.GetBlock(CodeWithVariant("state", "closed")) ?? this;
             ItemStack drop = new ItemStack(closedBlock);
             var arlBehavior = world.BlockAccessor.GetBlockEntity(pos)
@@ -323,5 +482,25 @@ namespace WindowStorageLib
                 arlBehavior.Variants.ToStack(drop);
             return new ItemStack[] { drop };
         }
+              public override string GetPlacedBlockInfo(IWorldAccessor world, BlockPos pos, IPlayer forPlayer)
+        {
+            if (Attributes?["pairedWith"].AsString(null) == "below")
+            {
+                BlockPos belowPos = pos.DownCopy();
+                Block belowBlock = world.BlockAccessor.GetBlock(belowPos);
+                if (belowBlock is BlockWindowStorageLib)
+                    return belowBlock.GetPlacedBlockInfo(world, belowPos, forPlayer);
+                return "";
+            }
+
+            return base.GetPlacedBlockInfo(world, pos, forPlayer);
+        }
+        public BlockPos GetControlBlockPos(BlockPos pos)
+        {
+            if (Attributes?["pairedWith"].AsString(null) == "below")
+                return pos.DownCopy();
+            return pos;
+        }
+
     }
 }
