@@ -436,31 +436,35 @@ namespace WindowStorageLib
             {
                 try
                 {
-                    if (blockAccessor.GetBlockEntity(pos) is BEWindowStorageLib be && be.Inventory != null)
-                    {
-                        byte bestV = 0, bestH = 0, bestS = 0;
-                        for (int i = 0; i < be.Inventory.Count; i++)
-                        {
-                            var itemstack = be.Inventory[i]?.Itemstack;
-                            if (itemstack?.Collectible?.LightHsv == null) continue;
-                            byte v = itemstack.Collectible.LightHsv[2];
-                            if (v > bestV)
-                            {
-                                bestV = v;
-                                bestH = itemstack.Collectible.LightHsv[0];
-                                bestS = itemstack.Collectible.LightHsv[1];
-                            }
-                        }
-                        if (bestV > 0) return new byte[] { bestH, bestS, bestV };
-                    }
+                    if (blockAccessor.GetBlockEntity(pos) is BEWindowStorageLib be && be.CachedLightHsv != null)
+                        return be.CachedLightHsv;
                 }
-                catch { }
+                catch (Exception e)
+                {
+                    // Log but don't crash — light is non-critical
+                    // Api is not available here so we fall through silently
+                    _ = e;
+                }
             }
             return base.GetLightHsv(blockAccessor, pos, stack);
         }
 
         private bool HandleItemInteraction(BEWindowStorageLib be, IPlayer byPlayer, BlockSelection blockSel)
         {
+            // 1. Try contained interaction first (cooking pots, crocks etc)
+            int index = blockSel.SelectionBoxIndex;
+            if (index >= 0 && index < be.Inventory.Count && !be.Inventory[index].Empty)
+            {
+                var iface = be.Inventory[index].Itemstack?.Collectible
+                    .GetCollectibleInterface<IContainedInteractable>();
+                if (iface != null && iface.OnContainedInteractStart(be, be.Inventory[index], byPlayer, blockSel))
+                {
+                    be.MarkDirty();
+                    return true;
+                }
+            }
+
+            // 2. Fall back to normal put/take
             ItemSlot hotbar = byPlayer.InventoryManager.ActiveHotbarSlot;
             if (hotbar.Empty)
                 return be.TryTake(byPlayer, blockSel);
@@ -482,7 +486,7 @@ namespace WindowStorageLib
                 arlBehavior.Variants.ToStack(drop);
             return new ItemStack[] { drop };
         }
-              public override string GetPlacedBlockInfo(IWorldAccessor world, BlockPos pos, IPlayer forPlayer)
+        public override string GetPlacedBlockInfo(IWorldAccessor world, BlockPos pos, IPlayer forPlayer)
         {
             if (Attributes?["pairedWith"].AsString(null) == "below")
             {
