@@ -36,8 +36,8 @@ namespace WindowStorageLib
         public string AnimOpen { get; set; }
         public string AnimClose { get; set; }
         public bool IsWindow { get; set; } = true;
-        public Cuboidf ClosedFrameBox { get; set; }    // ← renamed
-        public Cuboidf OpenFrameBox { get; set; }      // ← renamed
+        public Cuboidf ClosedFrameBox { get; set; }
+        public Cuboidf OpenFrameBox { get; set; }
         public Cuboidf[] StaticFrameBoxes { get; set; }
     }
 
@@ -48,20 +48,41 @@ namespace WindowStorageLib
         public Cuboidf[] StaticCollisionBoxes { get; set; }
     }
 
-
     public class BEWindowStorageLib : BlockEntityDisplay
     {
+        // ── Tick listeners / event bus ───────────────────────────────────────
         private long clientTickListener;
         private long serverTickListener;
         private EventBusListenerDelegate eventBusListener;
-        internal bool[] paneStates = new bool[10];
+
+        // ── Pane state ───────────────────────────────────────────────────────
+        internal bool[] paneStates = new bool[0];
         private bool _disposed = false;
 
+        // ── Handlers ────────────────────────────────────────────────────────
+        internal WindowAnimationHandler AnimHandler { get; private set; }
+        internal WindowSoundHandler SoundHandler { get; private set; }
+        internal WindowBoxCache BoxCache { get; private set; }
+        internal WindowLightManager LightManager { get; private set; }
+
+        // ── Accessors needed by handlers ────────────────────────────────────
+        internal bool IsDisposed => _disposed;
+        internal string WindowStyle => windowStyle;
+
+        // ── Block / mesh state ───────────────────────────────────────────────
         public FrameBoxGroup[] FrameBoxGroups { get; private set; }
 
-        // And add this helper to check the overall block state:
-        public bool IsAnyPaneOpen => paneStates != null && paneStates.Any(s => s);
-        internal BlockEntityAnimationUtil animUtil;
+        public bool IsAnyPaneOpen
+        {
+            get
+            {
+                if (paneStates == null) return false;
+                for (int i = 0; i < paneStates.Length; i++)
+                    if (paneStates[i]) return true;
+                return false;
+            }
+        }
+
         private string windowStyle;
         private int slotCount = 7;
         public float[] rotations;
@@ -69,17 +90,6 @@ namespace WindowStorageLib
         public int[] staggerModes;
         public float MeshAngleRad = 0f;
         private MeshRef blockMeshRef;
-
-
-        private int cachedSlotStartIndex;
-        private int[] cachedFrameStartIndex;
-        private int[] cachedFrameCounts;
-        private CollisionBoxGroup[] cachedCollisionGroups;
-
-        private static readonly Dictionary<string, (BlockPos owner, ILoadedSound sound)> SharedSounds = new();
-
-        private const float FadeSpeed = 1.5f;
-        private const float SmoothSpeed = 0.08f;
 
         public bool CanOpen => Block?.Attributes?["canOpen"].AsBool(false) ?? false;
 
@@ -103,14 +113,7 @@ namespace WindowStorageLib
         public bool IsFullyStacked => IsStacked && (GetStackingHideGroups() == null);
 
         public int GetGroupFrameStartIndex(int groupIndex)
-        {
-            if (groupIndex < 0 || groupIndex >= cachedFrameStartIndex.Length)
-                return cachedSlotStartIndex; // fallback
-
-            return cachedFrameStartIndex[groupIndex];
-        }
-
-
+            => BoxCache?.GetGroupFrameStartIndex(groupIndex) ?? 0;
 
         public override string InventoryClassName => $"windowstoragelib-{windowStyle}";
         internal InventoryGeneric inv;
@@ -118,6 +121,13 @@ namespace WindowStorageLib
         public override int DisplayedItems => slotCount;
         public override string AttributeTransformCode => "onWindowStorageTransform";
 
+        // ── Delegated accessors for BlockWindowStorageLib ────────────────────
+        public byte[] CachedLightHsv => LightManager?.CachedLightHsv;
+        public virtual Cuboidf[] GetSelectionBoxes() => BoxCache?.GetSelectionBoxes(GetSlotGroups()) ?? Array.Empty<Cuboidf>();
+        public Cuboidf[] GetCollisionBoxes() => BoxCache?.GetCollisionBoxes() ?? Block?.CollisionBoxes ?? Array.Empty<Cuboidf>();
+        public int GetGroupFrameBoxCount(int groupIndex) => BoxCache?.GetGroupFrameBoxes(groupIndex).Length ?? 0;
+
+        // ── Constructor ──────────────────────────────────────────────────────
         public BEWindowStorageLib()
         {
             slotCount = 7;
@@ -133,7 +143,6 @@ namespace WindowStorageLib
             if (Api == null) return baseMul;
 
             Room room = container.Room;
-            // If the window is open (any pane), it shouldn't protect food as well[cite: 1]
             bool effectivelyOpen = IsAnyPaneOpen || (room != null && room.ExitCount > 0);
             return baseMul * (effectivelyOpen ? 2.0f : 0.5f);
         }
@@ -166,16 +175,6 @@ namespace WindowStorageLib
             windowStyle = secondDash > 0 ? afterPrefix.Substring(0, secondDash) : afterPrefix;
         }
 
-        internal void PlaySlideSound()
-        {
-            if (capi == null) return;
-            capi.World.PlaySoundAt(
-                new AssetLocation("game", "sounds/effect/swoosh"),
-                Pos.X + 0.5f, Pos.Y + 0.5f, Pos.Z + 0.5f,
-                null, randomizePitch: true, range: 16f, volume: 0.8f
-            );
-        }
-
         private void EnsurePaneStateSize(int index)
         {
             if (index >= paneStates.Length)
@@ -189,17 +188,16 @@ namespace WindowStorageLib
             if (FrameBoxGroups == null || index >= FrameBoxGroups.Length) return;
             var group = FrameBoxGroups[index];
 
-            // Don't toggle static boxes
             if (group.StaticFrameBoxes != null &&
                 group.OpenFrameBox == null &&
                 group.ClosedFrameBox == null) return;
 
             EnsurePaneStateSize(index);
             paneStates[index] = !paneStates[index];
+            BoxCache?.Invalidate();
 
             MarkDirty(true);
 
-            // ⭐ ONLY WINDOWS CHANGE THE BLOCK STATE
             if (group.IsWindow)
             {
                 string targetState = IsAnyWindowPaneOpen ? "open" : "closed";
@@ -217,43 +215,34 @@ namespace WindowStorageLib
                         if (relightAccessor.GetBlockEntity(Pos) is BEWindowStorageLib newBe)
                         {
                             newBe.FromTreeAttributes(tree, Api.World);
-                            newBe.UpdateLightCache();
+                            newBe.LightManager.UpdateLightCache();
                             newBe.MarkDirty(true);
                         }
                     }
                 }
             }
 
-            // ⭐ Linked open only applies to windows
             if (group.IsWindow && (Block?.Attributes?["linkedOpen"].AsBool(false) ?? false))
             {
                 SyncLinkedWindows(index, paneStates[index], null);
             }
         }
 
-        /// <summary>
-        /// Recursively sync all linked windows to the target state.
-        /// </summary>
         private void SyncLinkedWindows(int index, bool targetState, HashSet<BlockPos> visited = null)
         {
             if (visited == null)
                 visited = new HashSet<BlockPos>();
 
-            // Prevent infinite loops
             if (visited.Contains(Pos))
                 return;
 
             visited.Add(Pos);
 
-            // Ensure array is large enough
             EnsurePaneStateSize(index);
-
-            // Apply state
             paneStates[index] = targetState;
             UpdateBlockVariant(index);
             MarkDirty(true);
 
-            // ---- UP ----
             var upPos = Pos.UpCopy();
             if (Api.World.BlockAccessor.GetBlockEntity(upPos) is BEWindowStorageLib upBe &&
                 upBe.Block?.Attributes?["linkedOpen"].AsBool(false) == true)
@@ -261,7 +250,6 @@ namespace WindowStorageLib
                 upBe.SyncLinkedWindows(index, targetState, visited);
             }
 
-            // ---- DOWN ----
             var downPos = Pos.DownCopy();
             if (Api.World.BlockAccessor.GetBlockEntity(downPos) is BEWindowStorageLib downBe &&
                 downBe.Block?.Attributes?["linkedOpen"].AsBool(false) == true)
@@ -270,13 +258,8 @@ namespace WindowStorageLib
             }
         }
 
-
-        /// <summary>
-        /// Helper method to update block variant without full exchange
-        /// </summary>
         private void UpdateBlockVariant(int index)
         {
-            // Only windows should affect the block's open/closed variant
             if (FrameBoxGroups == null || index >= FrameBoxGroups.Length)
                 return;
 
@@ -299,13 +282,12 @@ namespace WindowStorageLib
                     if (relightAccessor.GetBlockEntity(Pos) is BEWindowStorageLib newBe)
                     {
                         newBe.FromTreeAttributes(tree, Api.World);
-                        newBe.UpdateLightCache();
+                        newBe.LightManager.UpdateLightCache();
                         newBe.MarkDirty(true);
                     }
                 }
             }
         }
-
 
         public void InitializeWithAngle()
         {
@@ -316,123 +298,29 @@ namespace WindowStorageLib
             capi?.Event.EnqueueMainThreadTask(() =>
             {
                 if (_disposed) return;
-                InitializeAnimationUtil();
-                if (animUtil != null)
-                    UpdateAnimations(true);
+                AnimHandler?.InitializeAnimationUtil();
+                if (AnimHandler?.animUtil != null)
+                    AnimHandler.UpdateAnimations(true);
                 MarkMeshesDirty();
             }, "windowstoragelib-initanim");
-        }
-
-        private bool PlayerNearThisWindow(float range)
-        {
-            if (capi == null) return false;
-            Vec3d playerPos = capi.World.Player.Entity.Pos.XYZ;
-            double dx = playerPos.X - (Pos.X + 0.5);
-            double dy = playerPos.Y - (Pos.Y + 0.5);
-            double dz = playerPos.Z - (Pos.Z + 0.5);
-            return (dx * dx + dy * dy + dz * dz) <= (range * range);
-        }
-
-        private bool IsRainedOn(BlockPos pos)
-        {
-            if (capi == null) return false;
-            ClimateCondition cond = capi.World.BlockAccessor.GetClimateAt(pos, EnumGetClimateMode.NowValues);
-            if (cond == null || cond.Rainfall <= 0.1f || cond.Temperature <= 3f) return false;
-            return capi.World.BlockAccessor.GetRainMapHeightAt(pos) <= pos.Y ||
-                   capi.World.BlockAccessor.GetDistanceToRainFall(pos, 3) <= 2;
-        }
-
-        private float ComputeTargetRainVolume(BlockPos ownerPos)
-        {
-            ClimateCondition cond = capi.World.BlockAccessor.GetClimateAt(ownerPos, EnumGetClimateMode.NowValues);
-            float intensity = Math.Clamp(cond?.Rainfall ?? 0f, 0f, 1.5f);
-            return Math.Clamp(WindowStorageLibConfig.Current.RainSoundVolumeValue * intensity, 0f, 2f);
-        }
-
-        private void FadeSharedSoundsToCurrentTarget()
-        {
-            if (SharedSounds.TryGetValue("rain", out var rainEntry)
-                && rainEntry.sound != null && !rainEntry.sound.IsDisposed && rainEntry.sound.IsPlaying)
-            {
-                float target = ComputeTargetRainVolume(rainEntry.owner);
-                rainEntry.sound.FadeTo(target, FadeSpeed, (_) => { });
-            }
         }
 
         private void OnClientTick(float dt)
         {
             if (capi == null) return;
-
-            TickSharedRainSound();
-            UpdateAnimations(false);        // Keep panes updated
-        }
-
-        private void TickSharedRainSound()
-        {
-            bool shouldPlay = WindowStorageLibConfig.Current.EnableRainSound
-                && !(Block?.Attributes?["disableRainSound"].AsBool(false) ?? false)
-                && IsRainedOn(Pos)
-                && PlayerNearThisWindow((float)WindowStorageLibConfig.Current.RainSoundRange);
-
-            if (SharedSounds.TryGetValue("rain", out var existing))
-            {
-                bool soundAlive = existing.sound != null && !existing.sound.IsDisposed && existing.sound.IsPlaying;
-
-                if (soundAlive)
-                {
-                    existing.sound.SetPosition(capi.World.Player.Entity.Pos.XYZFloat);
-
-                    float target = ComputeTargetRainVolume(existing.owner);
-                    existing.sound.SetVolume(GameMath.Lerp(existing.sound.Params.Volume, target, SmoothSpeed));
-
-                    if (!shouldPlay && existing.owner == Pos)
-                    {
-                        existing.sound.FadeOutAndStop(FadeSpeed);
-                        SharedSounds.Remove("rain");
-                    }
-                    return;
-                }
-
-                TryDisposeSound(existing.sound);
-                SharedSounds.Remove("rain");
-            }
-
-            if (!shouldPlay) return;
-
-            ILoadedSound newSound = capi.World.LoadSound(new SoundParams()
-            {
-                Location = new AssetLocation("game", "sounds/environment/rainwindow"),
-                ShouldLoop = true,
-                Position = capi.World.Player.Entity.Pos.XYZFloat,
-                DisposeOnFinish = false,
-                Volume = ComputeTargetRainVolume(Pos),
-                Pitch = 1.0f
-            });
-
-            if (newSound != null)
-            {
-                newSound.Start();
-                SharedSounds["rain"] = (Pos, newSound);
-            }
-        }
-
-        private void TryDisposeSound(ILoadedSound sound)
-        {
-            if (sound == null) return;
-            try
-            {
-                if (!sound.IsDisposed)
-                {
-                    sound.Stop();
-                    sound.Dispose();
-                }
-            }
-            catch { }
+            SoundHandler?.Tick();
+            AnimHandler?.UpdateAnimations(false);
         }
 
         public override void Initialize(ICoreAPI api)
         {
-            _disposed = false;  // ← add this line
+            _disposed = false;
+
+            // Spin up handlers immediately — other code may reference them during init
+            LightManager = new WindowLightManager(this);
+            LightManager.Reset();
+            BoxCache = new WindowBoxCache(this);
+
             if (Block == null || Block.Id == 0)
             {
                 if (api.Side == EnumAppSide.Client && api is ICoreClientAPI clientApi)
@@ -513,10 +401,7 @@ namespace WindowStorageLib
                 staggerModes = newModes;
             }
 
-            // 2. NEW: Handle Separated Window Pane States
-            // This looks at "frameBoxGroups" in your JSON to decide how many panes we have
             FrameBoxGroups = Block?.Attributes?["frameBoxGroups"].AsObject<FrameBoxGroup[]>();
-            cachedCollisionGroups = Block?.Attributes?["collisionBoxGroups"]?.AsObject<CollisionBoxGroup[]>();
 
             int paneCount = FrameBoxGroups?.Length ?? 0;
 
@@ -527,30 +412,9 @@ namespace WindowStorageLib
                     Array.Copy(paneStates, newStates, Math.Min(paneStates.Length, paneCount));
                 paneStates = newStates;
             }
-            var slotGroups = GetSlotGroups();
 
-            // 1. Count active slots (ignoring stacked groups)
-            cachedSlotStartIndex = 0;
-            for (int g = 0; g < slotGroups.Count; g++)
-            {
-                if (!IsGroupStacked(g))
-                    cachedSlotStartIndex += slotGroups[g].Count;
-            }
-
-            // 2. Cache frame counts and start indices
-            cachedFrameCounts = new int[paneCount];
-            cachedFrameStartIndex = new int[paneCount];
-
-            int running = cachedSlotStartIndex;
-            for (int i = 0; i < paneCount; i++)
-            {
-                // Casement windows always have 1 frame box per pane
-                cachedFrameCounts[i] = 1;
-
-                cachedFrameStartIndex[i] = running;
-                running += cachedFrameCounts[i];
-            }
-
+            // Tell BoxCache to pre-parse all JSON box data once
+            BoxCache.ParseFromBlock(paneCount, GetSlotGroups());
 
             inv.LateInitialize(InventoryClassName + "-" + Pos.X + "_" + Pos.Y + "_" + Pos.Z, api);
             inv.SlotModified -= OnSlotModified;
@@ -567,7 +431,7 @@ namespace WindowStorageLib
                 serverTickListener = RegisterGameTickListener((_) => container.OnTick(0), 10000);
             }
 
-            UpdateLightCache();
+            LightManager.UpdateLightCache();
 
             if (api.Side == EnumAppSide.Client)
             {
@@ -580,22 +444,10 @@ namespace WindowStorageLib
                     });
                 }
 
-                capi?.Event.EnqueueMainThreadTask(() =>
-                {
-                    if (_disposed) return;
-                    InitializeAnimationUtil();
-                    if (animUtil != null)
-                    {
-                        string globalState = IsAnyWindowPaneOpen ? "open" : "closed";
-                        animUtil.StartAnimation(new AnimationMetaData()
-                        {
-                            Animation = globalState,
-                            Code = globalState,
-                            AnimationSpeed = 1000f
-                        });
-                    }
-                    MarkMeshesDirty();
-                }, "windowstoragelib-initanim");
+                AnimHandler = new WindowAnimationHandler(this, capi);
+                SoundHandler = new WindowSoundHandler(this, capi);
+
+                AnimHandler.EnqueueInitialSnap();
 
                 if (clientTickListener != 0)
                 {
@@ -619,176 +471,26 @@ namespace WindowStorageLib
             base.OnBlockPlaced(byItemStack);
             if (Api?.Side == EnumAppSide.Server)
             {
-                // Initialize with a default size; it will resize automatically if needed
-                paneStates = new bool[10];
+                int paneCount = FrameBoxGroups?.Length ?? 0;
+                paneStates = new bool[paneCount];
                 staggerModes = new int[GetSlotGroups().Count];
                 MarkDirty(true);
             }
         }
 
-        internal void InitializeAnimationUtil()
-        {
-            if (capi == null || Block == null) return;
-            animUtil?.Dispose();
-            animUtil = null;
-
-            try
-            {
-                string shapePath = Block?.Attributes?["animationShapePath"].AsString();
-                if (string.IsNullOrEmpty(shapePath)) return;
-
-                Shape animShape = capi.Assets.TryGet(shapePath)?.ToObject<Shape>();
-                if (animShape == null)
-                {
-                    Api.Logger.Warning($"[WindowStorageLib] Failed to load animation shape: {shapePath}");
-                    return;
-                }
-
-                ITexPositionSource texSource;
-                var arlBlockBehavior = Block?.GetBehavior<BlockBehaviorShapeTexturesFromAttributes>();
-                var arlBeBehavior = this.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
-
-                if (arlBlockBehavior != null && arlBeBehavior != null)
-                {
-                    // This is what worked in your old code
-                    var stexSource = new UniversalShapeTextureSource(capi, capi.BlockTextureAtlas, animShape, shapePath);
-                    foreach (var (code, texture) in Block.Textures)
-                        stexSource.textures[code] = texture;
-
-                    ShapeOverlayHelper.BakeVariantTextures(capi, stexSource, arlBeBehavior.Variants, arlBlockBehavior.texturesByType);
-                    texSource = stexSource;
-                }
-                else
-                {
-                    texSource = capi.Tesselator.GetTextureSource(Block);
-                }
-
-                float rot = MeshAngleRad * GameMath.RAD2DEG;
-                animUtil = new BlockEntityAnimationUtil(capi, this);
-                animUtil.InitializeAnimator($"window-{windowStyle}-{Pos.X}-{Pos.Y}-{Pos.Z}", animShape, texSource, new Vec3f(0, rot, 0));
-            }
-            catch (Exception e)
-            {
-                Api.Logger.Error($"[WindowStorageLib] Error initializing animation: {e.Message}");
-                animUtil = null;
-            }
-        }
-
-        private void UpdateAnimations(bool instant = false)
-        {
-            if (animUtil == null) return;
-
-            var frameGroups = FrameBoxGroups;
-            if (frameGroups == null) return;
-
-            // Pull the speed from your config
-            float configSpeed = WindowStorageLibConfig.Current.AnimationSpeedValue;
-
-            for (int i = 0; i < frameGroups.Length; i++)
-            {
-                if (i >= paneStates.Length) continue;
-
-                var group = frameGroups[i];
-
-                // Skip static groups that have no animations
-                if (string.IsNullOrEmpty(group.AnimOpen) || string.IsNullOrEmpty(group.AnimClose))
-                    continue;
-
-                string targetAnim = paneStates[i] ? group.AnimOpen : group.AnimClose;
-                string oppositeAnim = paneStates[i] ? group.AnimClose : group.AnimOpen;
-
-                if (animUtil.activeAnimationsByAnimCode.ContainsKey(oppositeAnim))
-                {
-                    animUtil.StopAnimation(oppositeAnim);
-                }
-
-                if (!animUtil.activeAnimationsByAnimCode.ContainsKey(targetAnim))
-                {
-                    var meta = new AnimationMetaData()
-                    {
-                        Animation = targetAnim,
-                        Code = targetAnim,
-                        AnimationSpeed = configSpeed, // Applied here
-                        EaseInSpeed = 10.0f,
-                        EaseOutSpeed = 5f,
-                        Weight = 1.0f,
-                        BlendMode = EnumAnimationBlendMode.Add
-                    };
-
-                    animUtil.StartAnimation(meta);
-                }
-            }
-        }
-
-        private byte[] _lastKnownLightHsv = null;
-        public byte[] CachedLightHsv => _lastKnownLightHsv;
-        private int _lightUpdateGeneration = 0;
-        private bool _blockBroken = false;
-
-        internal void UpdateLightCache()
-        {
-            if (inv == null) return;
-            byte bestV = 0, bestH = 0, bestS = 0;
-            for (int i = 0; i < inv.Count; i++)
-            {
-                var itemstack = inv[i]?.Itemstack;
-                if (itemstack?.Collectible?.LightHsv == null) continue;
-                byte v = itemstack.Collectible.LightHsv[2];
-                if (v > bestV)
-                {
-                    bestV = v;
-                    bestH = itemstack.Collectible.LightHsv[0];
-                    bestS = itemstack.Collectible.LightHsv[1];
-                }
-            }
-            _lastKnownLightHsv = bestV > 0 ? new byte[] { bestH, bestS, bestV } : null;
-        }
-
-        internal void ApplyLight()
-        {
-            if (Api?.Side != EnumAppSide.Server || Pos == null) return;
-            if (_lastKnownLightHsv == null) return;
-            int generation = ++_lightUpdateGeneration;
-
-            ItemStack[] stacks = new ItemStack[inv.Count];
-            for (int i = 0; i < inv.Count; i++)
-                stacks[i] = inv[i]?.Itemstack?.Clone();
-            float angle = MeshAngleRad;
-            bool[] snapPaneStates = (bool[])paneStates.Clone();
-            int[] snapStaggerModes = (int[])staggerModes?.Clone() ?? Array.Empty<int>();
-            float[] snapRotations = (float[])rotations.Clone();
-            float[] snapDepths = (float[])depths.Clone();
-
-            Api.Event.EnqueueMainThreadTask(() =>
-            {
-                if (_lightUpdateGeneration != generation || Api == null || Pos == null || _blockBroken) return;
-                if (Api.World.BlockAccessor.GetBlock(Pos).Id != Block.Id) return;
-                Api.World.BlockAccessor.ExchangeBlock(Block.Id, Pos);
-                if (Api.World.BlockAccessor.GetBlockEntity(Pos) is BEWindowStorageLib newBe)
-                {
-                    for (int i = 0; i < Math.Min(stacks.Length, newBe.inv.Count); i++)
-                        newBe.inv[i].Itemstack = stacks[i];
-                    newBe.MeshAngleRad = angle;
-                    newBe.paneStates = snapPaneStates;
-                    newBe.staggerModes = snapStaggerModes;
-                    newBe.rotations = snapRotations;
-                    newBe.depths = snapDepths;
-                    newBe.UpdateLightCache();
-                    newBe.MarkDirty(true);
-                }
-            }, "windowlight");
-        }
-
         private void OnSlotModified(int slotId)
         {
             if (Api?.Side == EnumAppSide.Client)
+            {
+                BoxCache?.Invalidate();
                 MarkMeshesDirty();
+            }
 
             if (Api?.Side == EnumAppSide.Server)
             {
-                byte[] oldLight = _lastKnownLightHsv;
-                UpdateLightCache();
-                byte[] newLight = _lastKnownLightHsv;
+                byte[] oldLight = LightManager.CachedLightHsv;
+                LightManager.UpdateLightCache();
+                byte[] newLight = LightManager.CachedLightHsv;
 
                 bool changed = (oldLight == null) != (newLight == null) ||
                     (oldLight != null && newLight != null &&
@@ -798,7 +500,7 @@ namespace WindowStorageLib
                 {
                     if (oldLight != null)
                         Api.World.BlockAccessor.RemoveBlockLight(oldLight, Pos);
-                    ApplyLight();
+                    LightManager.ApplyLight();
                 }
             }
 
@@ -821,10 +523,7 @@ namespace WindowStorageLib
 
         public override void OnBlockBroken(IPlayer byPlayer = null)
         {
-            _blockBroken = true;
-            ++_lightUpdateGeneration;
-            if (Api?.Side == EnumAppSide.Server && _lastKnownLightHsv != null)
-                Api.World.BlockAccessor.RemoveBlockLight(_lastKnownLightHsv, Pos);
+            LightManager?.OnBlockBroken();
             base.OnBlockBroken(byPlayer);
         }
 
@@ -885,20 +584,23 @@ namespace WindowStorageLib
             _slotGroups = null;
             float previousAngle = MeshAngleRad;
 
-            // 3. Handle Pane States (The Multi-Pane Logic)[cite: 1]
-            // 3. Handle Pane States (The Multi-Pane Logic)
-            bool[] oldPaneStates = paneStates?.ToArray();  // ← removed previousAnyOpen
+            // 3. Handle Pane States
+            bool[] oldPaneStates = paneStates != null ? (bool[])paneStates.Clone() : null;
 
             string states = tree.GetString("paneStates", "");
             if (!string.IsNullOrEmpty(states))
             {
-                paneStates = states.Select(c => c == '1').ToArray();
+                paneStates = new bool[states.Length];
+                for (int i = 0; i < states.Length; i++)
+                    paneStates[i] = states[i] == '1';
             }
             else
             {
                 bool legacyOpen = tree.GetBool("isOpen", false);
                 paneStates = new bool[] { legacyOpen };
             }
+
+            BoxCache?.Invalidate();
 
             // 4. Handle Stagger Modes
             int groupCount = GetSlotGroups().Count;
@@ -915,34 +617,14 @@ namespace WindowStorageLib
             MeshAngleRad = tree.GetFloat("meshAngleRad", 0f);
             blockMesh = null;
 
-            UpdateLightCache();
+            LightManager?.UpdateLightCache();
             RedrawAfterReceivingTreeAttributes(world);
 
-            // 5. Client-Side Visuals and Animations[cite: 2]
+            // 5. Client-Side Visuals and Animations
             if (Api?.Side == EnumAppSide.Client)
-            {
-                capi?.Event.EnqueueMainThreadTask(() =>
-                {
-                    if (_disposed) return;
-
-                    bool angleChanged = Math.Abs(MeshAngleRad - previousAngle) > 0.001f;
-                    if (angleChanged) InitializeAnimationUtil();
-
-                    if (animUtil != null)
-                    {
-                        animUtil.StopAnimation("open");
-                        animUtil.StopAnimation("closed");
-
-                        UpdateAnimations(true);
-                        if (oldPaneStates != null && oldPaneStates
-                            .Where((s, i) => i < paneStates.Length && s != paneStates[i])
-                            .Any()) PlaySlideSound();
-                    }
-                    MarkMeshesDirty();
-                    FadeSharedSoundsToCurrentTarget();
-                }, "windowstoragelib-fromtree");
-            }
+                AnimHandler?.EnqueueStateSync(previousAngle, oldPaneStates);
         }
+
         public override void ToTreeAttributes(ITreeAttribute tree)
         {
             base.ToTreeAttributes(tree);
@@ -950,9 +632,10 @@ namespace WindowStorageLib
             tree["depths"] = new FloatArrayAttribute(depths);
             tree["staggerModes"] = new IntArrayAttribute(staggerModes ?? Array.Empty<int>());
 
-            // Save the state of all panes as a string (e.g., "10" for top open, bottom closed)
-            string states = string.Join("", paneStates.Select(b => b ? "1" : "0"));
-            tree.SetString("paneStates", states);
+            var stateChars = new char[paneStates.Length];
+            for (int i = 0; i < paneStates.Length; i++)
+                stateChars[i] = paneStates[i] ? '1' : '0';
+            tree.SetString("paneStates", new string(stateChars));
 
             tree.SetFloat("meshAngleRad", MeshAngleRad);
         }
@@ -964,17 +647,11 @@ namespace WindowStorageLib
             blockMeshRef = null;
             blockMesh = null;
 
-            if (animUtil != null)
-            {
-                try
-                {
-                    animUtil.StopAnimation("open");
-                    animUtil.StopAnimation("closed");
-                    animUtil.Dispose();
-                }
-                catch { }
-                animUtil = null;
-            }
+            AnimHandler?.Dispose();
+            AnimHandler = null;
+
+            SoundHandler?.Dispose();
+            SoundHandler = null;
 
             if (clientTickListener != 0)
             {
@@ -987,21 +664,11 @@ namespace WindowStorageLib
                 Api.Event.UnregisterEventBusListener(eventBusListener);
                 eventBusListener = null;
             }
-
-            if (SharedSounds.TryGetValue("rain", out var rainEntry) && rainEntry.owner == Pos)
-            {
-                TryDisposeSound(rainEntry.sound);
-                SharedSounds.Remove("rain");
-            }
         }
 
         public override void OnBlockRemoved()
         {
-            _blockBroken = true;
-            ++_lightUpdateGeneration;
-
-            if (Api?.Side == EnumAppSide.Server && _lastKnownLightHsv != null)
-                Api.World.BlockAccessor.RemoveBlockLight(_lastKnownLightHsv, Pos);
+            LightManager?.OnBlockRemoved();
 
             if (inv != null)
             {
@@ -1016,7 +683,7 @@ namespace WindowStorageLib
             }
 
             CleanupClient();
-            base.OnBlockRemoved(); // once, at the end
+            base.OnBlockRemoved();
         }
 
         public override void OnBlockUnloaded()
@@ -1033,19 +700,13 @@ namespace WindowStorageLib
             }
 
             CleanupClient();
-            base.OnBlockUnloaded(); // once, at the end
+            base.OnBlockUnloaded();
         }
 
-
-
         public override void GetBlockInfo(IPlayer forPlayer, StringBuilder dsc)
-
-
-
         {
             if (Block?.Attributes?["pairedWith"].AsString(null) == "below")
             {
-                // Route to bottom BE instead
                 BlockPos belowPos = Pos.DownCopy();
                 while (Api.World.BlockAccessor.GetBlockEntity(belowPos) is BEWindowStorageLib belowBe &&
                        belowBe.Block?.Attributes?["pairedWith"].AsString(null) == "below")
@@ -1201,9 +862,9 @@ namespace WindowStorageLib
             return sb.ToString();
         }
 
-        // Public accessors
+        // ── Public accessors ─────────────────────────────────────────────────
         public List<SlotGroupDef> GetSlotGroupsPublic() => GetSlotGroups();
-        public int GetGroupFrameBoxCountPublic(int groupIndex) => GetGroupFrameBoxes(groupIndex).Length;
+        public int GetGroupFrameBoxCountPublic(int groupIndex) => BoxCache?.GetGroupFrameBoxes(groupIndex).Length ?? 0;
         public int GetGroupForSlotPublic(int slotIndex) => GetGroupForSlot(slotIndex);
 
         private List<SlotGroupDef> _slotGroups = null;
@@ -1369,125 +1030,6 @@ namespace WindowStorageLib
                 return;
             if (capi == null || Inventory.Empty) return;
             MarkMeshesDirty();
-        }
-
-        private Cuboidf[] GetGroupFrameBoxes(int groupIndex)
-        {
-            string openState = IsAnyPaneOpen ? "open" : "closed";
-            JsonObject groupsAttr = Block?.Attributes?["slotGroups"];
-            if (groupsAttr != null && groupsAttr.Exists)
-            {
-                var arr = groupsAttr.AsArray();
-                if (arr != null && groupIndex < arr.Length)
-                {
-                    var g = arr[groupIndex];
-                    JsonObject boxes = g[$"{openState}FrameBoxes"];
-                    if (boxes == null || !boxes.Exists) boxes = g["staticFrameBoxes"];
-                    if (boxes != null && boxes.Exists)
-                    {
-                        var result = boxes.AsObject<Cuboidf[]>();
-                        if (result != null && result.Length > 0) return result;
-                    }
-                }
-            }
-            return Array.Empty<Cuboidf>();
-        }
-
-        public virtual Cuboidf[] GetSelectionBoxes()
-        {
-            var groups = GetSlotGroups();
-            Cuboidf[] allSlotBoxes = Block?.SelectionBoxes ?? Array.Empty<Cuboidf>();
-            var resultList = new List<Cuboidf>();
-
-            // 1. Process Item Slots (Indices 0-6)
-            int slotOffset = 0;
-            for (int g = 0; g < groups.Count; g++)
-            {
-                int count = groups[g].Count;
-
-                for (int i = slotOffset; i < slotOffset + count && i < allSlotBoxes.Length; i++)
-                {
-                    if (!IsGroupStacked(g))
-                    {
-                        // Keep slot box
-                        resultList.Add(allSlotBoxes[i]);
-                    }
-                    else
-                    {
-                        // Preserve index alignment with an empty cuboid
-                        resultList.Add(new Cuboidf(0, 0, 0, 0, 0, 0));
-                    }
-                }
-
-                slotOffset += count;
-            }
-
-            // 2. Process Window Panes (Indices Inventory.Count+)
-            var frameGroups = FrameBoxGroups;
-            if (frameGroups != null)
-            {
-                for (int i = 0; i < frameGroups.Length; i++)
-                {
-                    // Static box always wins if present
-                    if (frameGroups[i].StaticFrameBoxes != null)
-                        resultList.AddRange(frameGroups[i].StaticFrameBoxes);
-
-                    bool isOpen = i < paneStates.Length && paneStates[i];
-                    var box = isOpen ? frameGroups[i].OpenFrameBox : frameGroups[i].ClosedFrameBox;
-                    if (box != null) resultList.Add(box);
-                }
-            }
-
-            return resultList.ToArray();
-        }
-
-
-
-
-        public Cuboidf[] GetCollisionBoxes()
-        {
-            List<Cuboidf> result = new List<Cuboidf>();
-
-            // 2. Try per‑pane collision groups
-            var collisionGroups = cachedCollisionGroups;
-            if (collisionGroups != null)
-            {
-                for (int i = 0; i < collisionGroups.Length; i++)
-                {
-                    var group = collisionGroups[i];
-
-                    // Static boxes are always added regardless of pane state
-                    if (group.StaticCollisionBoxes != null)
-                        result.AddRange(group.StaticCollisionBoxes);
-
-                    bool isOpen = i < paneStates.Length && paneStates[i];
-                    var box = isOpen ? group.OpenCollisionBox : group.ClosedCollisionBox;
-                    if (box != null) result.Add(box);
-                }
-
-                return result.ToArray();
-            }
-
-            // 1. Add slot collision boxes (from the block JSON) only if no collisionBoxGroups
-            var slotBoxes = Block?.CollisionBoxes;
-            if (slotBoxes != null)
-                result.AddRange(slotBoxes);
-
-            // 3. Fallback to your existing flat collision arrays
-            if (IsAnyWindowPaneOpen)
-            {
-                var openBoxes = Block?.Attributes?["openCollisionBoxes"]?.AsObject<Cuboidf[]>();
-                if (openBoxes != null)
-                    result.AddRange(openBoxes);
-            }
-            else
-            {
-                var closedBoxes = Block?.Attributes?["closedCollisionBoxes"]?.AsObject<Cuboidf[]>();
-                if (closedBoxes != null)
-                    result.AddRange(closedBoxes);
-            }
-
-            return result.ToArray();
         }
 
         private int GetGroupForSlot(int slotIndex)
