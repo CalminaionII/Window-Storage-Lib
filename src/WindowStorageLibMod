@@ -52,12 +52,14 @@ namespace WindowStorageLib
                         var pos = new BlockPos(packet.Positions[i], packet.Positions[i + 1], packet.Positions[i + 2]);
                         if (api.World.BlockAccessor.GetBlockEntity(pos) is BEWindowStorageLib be)
                         {
-                            if (be.animUtil == null) be.InitializeAnimationUtil();
-                            if (be.animUtil != null)
+                            if (be.AnimHandler?.animUtil == null)
+                                be.AnimHandler?.InitializeAnimationUtil();
+
+                            if (be.AnimHandler?.animUtil != null)
                             {
-                                be.animUtil.StopAnimation("open");
-                                be.animUtil.StopAnimation("closed");
-                                be.animUtil.StartAnimation(new AnimationMetaData()
+                                be.AnimHandler.animUtil.StopAnimation("open");
+                                be.AnimHandler.animUtil.StopAnimation("closed");
+                                be.AnimHandler.animUtil.StartAnimation(new AnimationMetaData()
                                 {
                                     Animation = packet.IsOpen ? "open" : "closed",
                                     Code = packet.IsOpen ? "open" : "closed",
@@ -65,7 +67,7 @@ namespace WindowStorageLib
                                     EaseInSpeed = WindowStorageLibConfig.Current.AnimationSpeed,
                                     EaseOutSpeed = WindowStorageLibConfig.Current.AnimationSpeed
                                 });
-                                be.PlaySlideSound();
+                                be.SoundHandler?.PlaySlideSound();
                             }
                         }
                     }
