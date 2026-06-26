@@ -532,6 +532,14 @@ namespace WindowStorageLib
             base.OnBlockBroken(byPlayer);
         }
 
+        protected override void RedrawAfterReceivingTreeAttributes(IWorldAccessor world)
+        {
+            // Suppress base class MarkMeshesDirty — we handle mesh updates via
+            // EnqueueInitialSnap (from Initialize) and EnqueueStateSync (from
+            // FromTreeAttributes). The base implementation triggers redundant
+            // chunk retessellation on every FromTreeAttributes call.
+        }
+
         public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor world)
         {
             // 1. Handle Inventory and Slot Logic
@@ -565,8 +573,14 @@ namespace WindowStorageLib
                         inv[i].Itemstack = oldStacks[i];
             }
 
+            // Detach SlotModified during base.FromTreeAttributes to prevent
+            // per-slot MarkMeshesDirty cascade during inventory deserialization
+            if (inv != null) inv.SlotModified -= OnSlotModified;
+
             slotCount = newSlotCount;
             base.FromTreeAttributes(tree, world);
+
+            if (inv != null) inv.SlotModified += OnSlotModified;
 
             // 2. Handle Rotations and Depths
             rotations = (tree["rotations"] as FloatArrayAttribute)?.value ?? new float[newSlotCount];
@@ -586,7 +600,6 @@ namespace WindowStorageLib
                 depths = newDepth;
             }
 
-            _slotGroups = null;
             float previousAngle = MeshAngleRad;
 
             // 3. Handle Pane States
