@@ -62,7 +62,7 @@ namespace WindowStorageLib
                                 Code = targetAnim,
                                 AnimationSpeed = 1000f,
                                 EaseInSpeed = 1000f,
-                                EaseOutSpeed = 1000f,
+                                EaseOutSpeed = 5f,
                                 Weight = 1.0f,
                                 BlendMode = EnumAnimationBlendMode.Add
                             });

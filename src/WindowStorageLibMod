@@ -63,9 +63,11 @@ namespace WindowStorageLib
                                 {
                                     Animation = packet.IsOpen ? "open" : "closed",
                                     Code = packet.IsOpen ? "open" : "closed",
-                                    AnimationSpeed = WindowStorageLibConfig.Current.AnimationSpeed,
-                                    EaseInSpeed = WindowStorageLibConfig.Current.AnimationSpeed,
-                                    EaseOutSpeed = WindowStorageLibConfig.Current.AnimationSpeed
+                                    AnimationSpeed = WindowStorageLibConfig.Current.AnimationSpeedValue,
+                                    EaseInSpeed = 10.0f,
+                                    EaseOutSpeed = 5f,
+                                    Weight = 1.0f,
+                                    BlendMode = EnumAnimationBlendMode.Add
                                 });
                                 be.SoundHandler?.PlaySlideSound();
                             }
