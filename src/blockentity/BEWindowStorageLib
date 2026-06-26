@@ -90,6 +90,11 @@ namespace WindowStorageLib
         public int[] staggerModes;
         public float MeshAngleRad = 0f;
         private MeshRef blockMeshRef;
+        private volatile bool _meshUpdatePending;
+        private float[][] _cachedTransformMatrices;
+        private bool _transformsDirty = true;
+
+        internal void InvalidateTransforms() => _transformsDirty = true;
 
         public bool CanOpen => Block?.Attributes?["canOpen"].AsBool(false) ?? false;
 
@@ -294,6 +299,7 @@ namespace WindowStorageLib
             blockMeshRef?.Dispose();
             blockMeshRef = null;
             blockMesh = null;
+            _transformsDirty = true;
 
             capi?.Event.EnqueueMainThreadTask(() =>
             {
@@ -308,8 +314,7 @@ namespace WindowStorageLib
         private void OnClientTick(float dt)
         {
             if (capi == null) return;
-            SoundHandler?.Tick();
-            AnimHandler?.UpdateAnimations(false);
+            SoundHandler?.Tick(dt);
         }
 
         public override void Initialize(ICoreAPI api)
@@ -616,6 +621,7 @@ namespace WindowStorageLib
 
             MeshAngleRad = tree.GetFloat("meshAngleRad", 0f);
             blockMesh = null;
+            _transformsDirty = true;
 
             LightManager?.UpdateLightCache();
             RedrawAfterReceivingTreeAttributes(world);
@@ -646,6 +652,7 @@ namespace WindowStorageLib
             blockMeshRef?.Dispose();
             blockMeshRef = null;
             blockMesh = null;
+            _meshUpdatePending = false;
 
             AnimHandler?.Dispose();
             AnimHandler = null;
@@ -917,6 +924,10 @@ namespace WindowStorageLib
 
         protected override float[][] genTransformationMatrices()
         {
+            if (!_transformsDirty && _cachedTransformMatrices != null && _cachedTransformMatrices.Length == slotCount)
+                return _cachedTransformMatrices;
+            _transformsDirty = false;
+
             float[][] matrices = new float[slotCount][];
             var config = WindowStorageLibConfig.Current;
             float staggerForward = config.StaggerForwardOffset;
@@ -957,6 +968,7 @@ namespace WindowStorageLib
                 }
             }
 
+            _cachedTransformMatrices = matrices;
             return matrices;
         }
 
@@ -975,10 +987,12 @@ namespace WindowStorageLib
 
         private void UpdateBlockMesh()
         {
-            if (capi == null) return;
+            if (capi == null || _meshUpdatePending) return;
+            _meshUpdatePending = true;
 
             capi.Event.EnqueueMainThreadTask(() =>
             {
+                _meshUpdatePending = false;
                 if (_disposed) return;
 
                 blockMeshRef?.Dispose();
@@ -1014,7 +1028,7 @@ namespace WindowStorageLib
 
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
         {
-            if (blockMesh == null)
+            if (blockMesh == null && !_meshUpdatePending)
                 UpdateBlockMesh();
 
             if (blockMesh != null)

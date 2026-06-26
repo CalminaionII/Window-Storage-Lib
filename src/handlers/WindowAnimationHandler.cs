@@ -15,6 +15,7 @@ namespace WindowStorageLib
 
         internal BlockEntityAnimationUtil animUtil;
         internal bool AnimInitialized = false;
+        private bool _initSnapPending;
 
         public WindowAnimationHandler(BEWindowStorageLib be, ICoreClientAPI capi)
         {
@@ -29,10 +30,12 @@ namespace WindowStorageLib
         /// </summary>
         public void EnqueueInitialSnap()
         {
+            _initSnapPending = true;
             AnimInitialized = false;
 
             _capi.Event.EnqueueMainThreadTask(() =>
             {
+                _initSnapPending = false;
                 if (_be.IsDisposed) return;
 
                 InitializeAnimationUtil();
@@ -80,6 +83,8 @@ namespace WindowStorageLib
         /// </summary>
         public void EnqueueStateSync(float previousAngle, bool[] oldPaneStates)
         {
+            if (_initSnapPending) return;
+
             _capi.Event.EnqueueMainThreadTask(() =>
             {
                 if (_be.IsDisposed) return;
