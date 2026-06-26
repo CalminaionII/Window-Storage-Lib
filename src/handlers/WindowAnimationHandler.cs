@@ -15,6 +15,8 @@ namespace WindowStorageLib
 
         internal BlockEntityAnimationUtil animUtil;
         internal bool AnimInitialized = false;
+        private bool _initSnapPending;
+        internal bool InitSnapPending => _initSnapPending;
 
         public WindowAnimationHandler(BEWindowStorageLib be, ICoreClientAPI capi)
         {
@@ -29,10 +31,12 @@ namespace WindowStorageLib
         /// </summary>
         public void EnqueueInitialSnap()
         {
+            _initSnapPending = true;
             AnimInitialized = false;
 
             _capi.Event.EnqueueMainThreadTask(() =>
             {
+                _initSnapPending = false;
                 if (_be.IsDisposed) return;
 
                 InitializeAnimationUtil();
@@ -66,6 +70,7 @@ namespace WindowStorageLib
                     }
                 }
 
+                _be.BuildBlockMeshNow();
                 _be.MarkMeshesDirty();
                 AnimInitialized = true;
 
@@ -80,6 +85,8 @@ namespace WindowStorageLib
         /// </summary>
         public void EnqueueStateSync(float previousAngle, bool[] oldPaneStates)
         {
+            if (_initSnapPending) return;
+
             _capi.Event.EnqueueMainThreadTask(() =>
             {
                 if (_be.IsDisposed) return;
@@ -87,25 +94,23 @@ namespace WindowStorageLib
                 bool angleChanged = Math.Abs(_be.MeshAngleRad - previousAngle) > 0.001f;
                 if (angleChanged) InitializeAnimationUtil();
 
-                if (animUtil != null)
+                bool paneChanged = false;
+                if (oldPaneStates != null)
                 {
-                    bool paneChanged = false;
-                    if (oldPaneStates != null)
+                    int checkLen = Math.Min(oldPaneStates.Length, _be.paneStates.Length);
+                    for (int pi = 0; pi < checkLen; pi++)
                     {
-                        int checkLen = Math.Min(oldPaneStates.Length, _be.paneStates.Length);
-                        for (int pi = 0; pi < checkLen; pi++)
-                        {
-                            if (oldPaneStates[pi] != _be.paneStates[pi]) { paneChanged = true; break; }
-                        }
+                        if (oldPaneStates[pi] != _be.paneStates[pi]) { paneChanged = true; break; }
                     }
-
-                    if (AnimInitialized && (paneChanged || angleChanged))
-                        UpdateAnimations(false);
-
-                    if (paneChanged) _be.SoundHandler?.PlaySlideSound();
                 }
 
-                _be.MarkMeshesDirty();
+                if (animUtil != null && AnimInitialized && (paneChanged || angleChanged))
+                    UpdateAnimations(false);
+
+                if (paneChanged || angleChanged)
+                    _be.MarkMeshesDirty();
+
+                if (paneChanged) _be.SoundHandler?.PlaySlideSound();
                 _be.SoundHandler?.FadeSharedSoundsToCurrentTarget();
 
             }, "windowstoragelib-fromtree");

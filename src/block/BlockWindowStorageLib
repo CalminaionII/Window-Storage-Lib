@@ -383,6 +383,7 @@ namespace WindowStorageLib
                 }
             }
 
+            be.InvalidateTransforms();
             be.MarkDirty(true);
             world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"), blockSel.Position, 0, byPlayer);
             return true;
@@ -397,6 +398,7 @@ namespace WindowStorageLib
             var config = WindowStorageLibConfig.Current;
             float step = config.RotationStepDegrees;
             be.rotations[slotIndex] = (be.rotations[slotIndex] + step * direction + 360f) % 360f;
+            be.InvalidateTransforms();
             be.MarkDirty(true);
 
             world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"),
@@ -422,6 +424,7 @@ namespace WindowStorageLib
             if (next < minDepth - 0.001f) next = maxDepth;
 
             be.depths[slotIndex] = next;
+            be.InvalidateTransforms();
             be.MarkDirty(true);
 
             world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"),
