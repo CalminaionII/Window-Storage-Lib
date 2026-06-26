@@ -25,8 +25,8 @@ namespace WindowStorageLib
         }
 
         /// <summary>
-        /// Called from Initialize — sets up the animator then snaps straight to
-        /// the saved pane state with no visible animation playback.
+        /// Called from Initialize — sets up the animator then plays the saved
+        /// pane state animation at normal speed for smooth transitions later.
         /// Must run on the main thread via EnqueueMainThreadTask for Linux compatibility.
         /// </summary>
         public void EnqueueInitialSnap()
@@ -56,13 +56,14 @@ namespace WindowStorageLib
                         animUtil.StopAnimation(oppositeAnim);
                         if (!animUtil.activeAnimationsByAnimCode.ContainsKey(targetAnim))
                         {
+                            float configSpeed = WindowStorageLibConfig.Current.AnimationSpeedValue;
                             animUtil.StartAnimation(new AnimationMetaData()
                             {
                                 Animation = targetAnim,
                                 Code = targetAnim,
-                                AnimationSpeed = 1000f,
-                                EaseInSpeed = 1000f,
-                                EaseOutSpeed = 1000f,
+                                AnimationSpeed = configSpeed,
+                                EaseInSpeed = 10.0f,
+                                EaseOutSpeed = 5f,
                                 Weight = 1.0f,
                                 BlendMode = EnumAnimationBlendMode.Add
                             });
