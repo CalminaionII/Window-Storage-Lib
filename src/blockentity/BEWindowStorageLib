@@ -619,12 +619,13 @@ namespace WindowStorageLib
                 for (int i = 0; i < groupCount; i++) staggerModes[i] = legacy;
             }
 
-            MeshAngleRad = tree.GetFloat("meshAngleRad", 0f);
-            blockMesh = null;
+            float newAngle = tree.GetFloat("meshAngleRad", 0f);
+            if (Math.Abs(MeshAngleRad - newAngle) > 0.001f)
+                blockMesh = null;
+            MeshAngleRad = newAngle;
             _transformsDirty = true;
 
             LightManager?.UpdateLightCache();
-            RedrawAfterReceivingTreeAttributes(world);
 
             // 5. Client-Side Visuals and Animations
             if (Api?.Side == EnumAppSide.Client)
@@ -985,6 +986,40 @@ namespace WindowStorageLib
 
         internal MeshData blockMesh;
 
+        internal void BuildBlockMeshNow()
+        {
+            _meshUpdatePending = false;
+            if (blockMesh != null || capi == null || _disposed) return;
+
+            blockMeshRef?.Dispose();
+            blockMeshRef = null;
+
+            var arlBlockBehavior = Block?.GetBehavior<BlockBehaviorShapeTexturesFromAttributes>();
+            var arlBeBehavior = this.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
+
+            if (arlBlockBehavior != null && arlBeBehavior != null)
+            {
+                CompositeShape cshape = Block.Attributes?["shape"].AsObject<CompositeShape>() ?? Block.Shape;
+                blockMesh = arlBlockBehavior.GetOrCreateMesh(
+                    arlBeBehavior.Variants,
+                    cshape,
+                    Pos,
+                    null,
+                    null
+                )?.Clone();
+            }
+            else
+            {
+                capi.Tesselator.TesselateBlock(Block, out blockMesh);
+            }
+
+            if (blockMesh != null && MeshAngleRad != 0f)
+                blockMesh = blockMesh.Rotate(new Vec3f(0.5f, 0.0f, 0.5f), 0f, MeshAngleRad, 0f);
+
+            if (blockMesh != null)
+                blockMeshRef = capi.Render.UploadMesh(blockMesh);
+        }
+
         private void UpdateBlockMesh()
         {
             if (capi == null || _meshUpdatePending) return;
@@ -992,43 +1027,14 @@ namespace WindowStorageLib
 
             capi.Event.EnqueueMainThreadTask(() =>
             {
-                _meshUpdatePending = false;
-                if (_disposed) return;
-
-                blockMeshRef?.Dispose();
-                blockMeshRef = null;
-
-                var arlBlockBehavior = Block?.GetBehavior<BlockBehaviorShapeTexturesFromAttributes>();
-                var arlBeBehavior = this.GetBehavior<BlockEntityBehaviorShapeTexturesFromAttributes>();
-
-                if (arlBlockBehavior != null && arlBeBehavior != null)
-                {
-                    CompositeShape cshape = Block.Attributes?["shape"].AsObject<CompositeShape>() ?? Block.Shape;
-                    blockMesh = arlBlockBehavior.GetOrCreateMesh(
-                        arlBeBehavior.Variants,
-                        cshape,
-                        Pos,
-                        null,
-                        null
-                    )?.Clone();
-                }
-                else
-                {
-                    capi.Tesselator.TesselateBlock(Block, out blockMesh);
-                }
-
-                if (blockMesh != null && MeshAngleRad != 0f)
-                    blockMesh = blockMesh.Rotate(new Vec3f(0.5f, 0.0f, 0.5f), 0f, MeshAngleRad, 0f);
-
-                if (blockMesh != null)
-                    blockMeshRef = capi.Render.UploadMesh(blockMesh);
-
+                if (_disposed) { _meshUpdatePending = false; return; }
+                BuildBlockMeshNow();
             }, "windowstoragelib-uploadmesh");
         }
 
         public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
         {
-            if (blockMesh == null && !_meshUpdatePending)
+            if (blockMesh == null && !_meshUpdatePending && !(AnimHandler?.InitSnapPending ?? false))
                 UpdateBlockMesh();
 
             if (blockMesh != null)
