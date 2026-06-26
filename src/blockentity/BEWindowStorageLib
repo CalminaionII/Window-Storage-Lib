@@ -149,7 +149,7 @@ namespace WindowStorageLib
 
             Room room = container.Room;
             bool effectivelyOpen = IsAnyPaneOpen || (room != null && room.ExitCount > 0);
-            return baseMul * (effectivelyOpen ? 2.0f : 0.5f);
+            return baseMul * (effectivelyOpen ? 2.0f : 1.0f);
         }
 
         private void DeriveStyleFromBlock()
@@ -186,10 +186,59 @@ namespace WindowStorageLib
                 Array.Resize(ref paneStates, index + 1);
         }
 
+        private int ComputeSlotCountFromAttributes()
+        {
+            int count = Block?.Attributes?["slotCount"].AsInt(-1) ?? -1;
+            if (count < 0)
+            {
+                JsonObject groupsAttr = Block?.Attributes?["slotGroups"];
+                if (groupsAttr != null && groupsAttr.Exists)
+                {
+                    var arr = groupsAttr.AsArray();
+                    count = 0;
+                    if (arr != null) foreach (var g in arr) count += g["count"].AsInt(7);
+                }
+                else count = 7;
+            }
+            return count;
+        }
+
+        private void EnsureInventorySize(int newSlotCount)
+        {
+            if (inv == null)
+            {
+                inv = new InventoryGeneric(newSlotCount, null, null);
+                inv.OnAcquireTransitionSpeed += Inventory_OnAcquireTransitionSpeed;
+            }
+            else if (inv.Count != newSlotCount)
+            {
+                ItemStack[] oldStacks = new ItemStack[inv.Count];
+                for (int i = 0; i < inv.Count; i++)
+                    oldStacks[i] = inv[i].Itemstack?.Clone();
+
+                inv.OnAcquireTransitionSpeed -= Inventory_OnAcquireTransitionSpeed;
+                inv.SlotModified -= OnSlotModified;
+                inv = new InventoryGeneric(newSlotCount, null, null);
+                inv.OnAcquireTransitionSpeed += Inventory_OnAcquireTransitionSpeed;
+
+                for (int i = 0; i < Math.Min(oldStacks.Length, newSlotCount); i++)
+                    if (oldStacks[i] != null)
+                        inv[i].Itemstack = oldStacks[i];
+            }
+        }
+
+        private static T[] ResizeArray<T>(T[] existing, int newSize)
+        {
+            if (existing != null && existing.Length == newSize) return existing;
+            T[] resized = new T[newSize];
+            if (existing != null)
+                Array.Copy(existing, 0, resized, 0, Math.Min(existing.Length, newSize));
+            return resized;
+        }
+
         public void TogglePane(int index)
         {
             if (!CanOpen || Api.Side != EnumAppSide.Server) return;
-
             if (FrameBoxGroups == null || index >= FrameBoxGroups.Length) return;
             var group = FrameBoxGroups[index];
 
@@ -200,66 +249,32 @@ namespace WindowStorageLib
             EnsurePaneStateSize(index);
             paneStates[index] = !paneStates[index];
             BoxCache?.Invalidate();
-
             MarkDirty(true);
 
             if (group.IsWindow)
-            {
-                string targetState = IsAnyWindowPaneOpen ? "open" : "closed";
-
-                if (Block.Variant["state"] != targetState)
-                {
-                    Block targetBlock = Api.World.GetBlock(Block.CodeWithVariant("state", targetState));
-                    if (targetBlock != null && targetBlock != Block)
-                    {
-                        ITreeAttribute tree = new TreeAttribute();
-                        ToTreeAttributes(tree);
-                        IBlockAccessor relightAccessor = Api.World.GetBlockAccessor(false, true, false);
-                        relightAccessor.ExchangeBlock(targetBlock.Id, Pos);
-
-                        if (relightAccessor.GetBlockEntity(Pos) is BEWindowStorageLib newBe)
-                        {
-                            newBe.FromTreeAttributes(tree, Api.World);
-                            newBe.LightManager.UpdateLightCache();
-                            newBe.MarkDirty(true);
-                        }
-                    }
-                }
-            }
+                UpdateBlockVariant(index);
 
             if (group.IsWindow && (Block?.Attributes?["linkedOpen"].AsBool(false) ?? false))
-            {
-                SyncLinkedWindows(index, paneStates[index], null);
-            }
+                SyncLinkedWindows(index, paneStates[index]);
         }
 
-        private void SyncLinkedWindows(int index, bool targetState, HashSet<BlockPos> visited = null)
+        private void SyncLinkedWindows(int index, bool targetState)
         {
-            if (visited == null)
-                visited = new HashSet<BlockPos>();
+            SyncLinkedDirection(index, targetState, 1);
+            SyncLinkedDirection(index, targetState, -1);
+        }
 
-            if (visited.Contains(Pos))
-                return;
-
-            visited.Add(Pos);
-
-            EnsurePaneStateSize(index);
-            paneStates[index] = targetState;
-            UpdateBlockVariant(index);
-            MarkDirty(true);
-
-            var upPos = Pos.UpCopy();
-            if (Api.World.BlockAccessor.GetBlockEntity(upPos) is BEWindowStorageLib upBe &&
-                upBe.Block?.Attributes?["linkedOpen"].AsBool(false) == true)
+        private void SyncLinkedDirection(int index, bool targetState, int yDir)
+        {
+            var pos = yDir > 0 ? Pos.UpCopy() : Pos.DownCopy();
+            while (Api.World.BlockAccessor.GetBlockEntity(pos) is BEWindowStorageLib be &&
+                   be.Block?.Attributes?["linkedOpen"].AsBool(false) == true)
             {
-                upBe.SyncLinkedWindows(index, targetState, visited);
-            }
-
-            var downPos = Pos.DownCopy();
-            if (Api.World.BlockAccessor.GetBlockEntity(downPos) is BEWindowStorageLib downBe &&
-                downBe.Block?.Attributes?["linkedOpen"].AsBool(false) == true)
-            {
-                downBe.SyncLinkedWindows(index, targetState, visited);
+                be.EnsurePaneStateSize(index);
+                be.paneStates[index] = targetState;
+                be.UpdateBlockVariant(index);
+                be.MarkDirty(true);
+                pos = yDir > 0 ? pos.UpCopy() : pos.DownCopy();
             }
         }
 
@@ -344,79 +359,19 @@ namespace WindowStorageLib
             base.Initialize(api);
 
             _slotGroups = null;
-            int newSlotCount = Block?.Attributes?["slotCount"].AsInt(-1) ?? -1;
-            if (newSlotCount < 0)
-            {
-                JsonObject groupsAttr = Block?.Attributes?["slotGroups"];
-                if (groupsAttr != null && groupsAttr.Exists)
-                {
-                    var arr = groupsAttr.AsArray();
-                    newSlotCount = 0;
-                    if (arr != null) foreach (var g in arr) newSlotCount += g["count"].AsInt(7);
-                }
-                else newSlotCount = 7;
-            }
-            newSlotCount = Math.Clamp(newSlotCount, 0, 64);
-
-            if (inv == null)
-            {
-                inv = new InventoryGeneric(newSlotCount, null, null);
-                inv.OnAcquireTransitionSpeed += Inventory_OnAcquireTransitionSpeed;
-            }
-            else if (inv.Count != newSlotCount)
-            {
-                ItemStack[] oldStacks = new ItemStack[inv.Count];
-                for (int i = 0; i < inv.Count; i++)
-                    oldStacks[i] = inv[i].Itemstack?.Clone();
-
-                inv.OnAcquireTransitionSpeed -= Inventory_OnAcquireTransitionSpeed;
-                inv.SlotModified -= OnSlotModified;
-                inv = new InventoryGeneric(newSlotCount, null, null);
-                inv.OnAcquireTransitionSpeed += Inventory_OnAcquireTransitionSpeed;
-
-                for (int i = 0; i < Math.Min(oldStacks.Length, newSlotCount); i++)
-                    if (oldStacks[i] != null)
-                        inv[i].Itemstack = oldStacks[i];
-            }
-
+            int newSlotCount = Math.Clamp(ComputeSlotCountFromAttributes(), 0, 64);
+            EnsureInventorySize(newSlotCount);
             slotCount = newSlotCount;
 
-            if (rotations == null || rotations.Length != newSlotCount)
-            {
-                float[] newRot = new float[newSlotCount];
-                if (rotations != null)
-                    Array.Copy(rotations, 0, newRot, 0, Math.Min(rotations.Length, newSlotCount));
-                rotations = newRot;
-            }
-
-            if (depths == null || depths.Length != newSlotCount)
-            {
-                float[] newDepth = new float[newSlotCount];
-                if (depths != null)
-                    Array.Copy(depths, 0, newDepth, 0, Math.Min(depths.Length, newSlotCount));
-                depths = newDepth;
-            }
-
-            int groupCount = GetSlotGroups().Count;
-            if (staggerModes == null || staggerModes.Length != groupCount)
-            {
-                int[] newModes = new int[groupCount];
-                if (staggerModes != null)
-                    Array.Copy(staggerModes, 0, newModes, 0, Math.Min(staggerModes.Length, groupCount));
-                staggerModes = newModes;
-            }
+            rotations = ResizeArray(rotations, newSlotCount);
+            depths = ResizeArray(depths, newSlotCount);
+            staggerModes = ResizeArray(staggerModes, GetSlotGroups().Count);
 
             FrameBoxGroups = Block?.Attributes?["frameBoxGroups"].AsObject<FrameBoxGroup[]>();
 
             int paneCount = FrameBoxGroups?.Length ?? 0;
 
-            if (paneStates == null || paneStates.Length != paneCount)
-            {
-                bool[] newStates = new bool[paneCount];
-                if (paneStates != null)
-                    Array.Copy(paneStates, newStates, Math.Min(paneStates.Length, paneCount));
-                paneStates = newStates;
-            }
+            paneStates = ResizeArray(paneStates, paneCount);
 
             // Tell BoxCache to pre-parse all JSON box data once
             BoxCache.ParseFromBlock(paneCount, GetSlotGroups());
@@ -492,22 +447,7 @@ namespace WindowStorageLib
             }
 
             if (Api?.Side == EnumAppSide.Server)
-            {
-                byte[] oldLight = LightManager.CachedLightHsv;
-                LightManager.UpdateLightCache();
-                byte[] newLight = LightManager.CachedLightHsv;
-
-                bool changed = (oldLight == null) != (newLight == null) ||
-                    (oldLight != null && newLight != null &&
-                    (oldLight[0] != newLight[0] || oldLight[1] != newLight[1] || oldLight[2] != newLight[2]));
-
-                if (changed)
-                {
-                    if (oldLight != null)
-                        Api.World.BlockAccessor.RemoveBlockLight(oldLight, Pos);
-                    LightManager.ApplyLight();
-                }
-            }
+                LightManager?.RefreshLightOnSlotChange();
 
             MarkDirty(true);
         }
@@ -543,35 +483,8 @@ namespace WindowStorageLib
         public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor world)
         {
             // 1. Handle Inventory and Slot Logic
-            int newSlotCount = Block?.Attributes?["slotCount"].AsInt(-1) ?? -1;
-            if (newSlotCount < 0)
-            {
-                JsonObject groupsAttr = Block?.Attributes?["slotGroups"];
-                if (groupsAttr != null && groupsAttr.Exists)
-                {
-                    var arr = groupsAttr.AsArray();
-                    newSlotCount = 0;
-                    if (arr != null) foreach (var g in arr) newSlotCount += g["count"].AsInt(7);
-                }
-                else newSlotCount = 7;
-            }
-            newSlotCount = Math.Clamp(newSlotCount, 1, 64);
-
-            if (inv != null && inv.Count != newSlotCount)
-            {
-                ItemStack[] oldStacks = new ItemStack[inv.Count];
-                for (int i = 0; i < inv.Count; i++)
-                    oldStacks[i] = inv[i].Itemstack?.Clone();
-
-                inv.OnAcquireTransitionSpeed -= Inventory_OnAcquireTransitionSpeed;
-                inv.SlotModified -= OnSlotModified;
-                inv = new InventoryGeneric(newSlotCount, null, null);
-                inv.OnAcquireTransitionSpeed += Inventory_OnAcquireTransitionSpeed;
-
-                for (int i = 0; i < Math.Min(oldStacks.Length, newSlotCount); i++)
-                    if (oldStacks[i] != null)
-                        inv[i].Itemstack = oldStacks[i];
-            }
+            int newSlotCount = Math.Clamp(ComputeSlotCountFromAttributes(), 1, 64);
+            EnsureInventorySize(newSlotCount);
 
             // Detach SlotModified during base.FromTreeAttributes to prevent
             // per-slot MarkMeshesDirty cascade during inventory deserialization
@@ -585,20 +498,8 @@ namespace WindowStorageLib
             // 2. Handle Rotations and Depths
             rotations = (tree["rotations"] as FloatArrayAttribute)?.value ?? new float[newSlotCount];
             depths = (tree["depths"] as FloatArrayAttribute)?.value ?? new float[newSlotCount];
-
-            if (rotations.Length != slotCount)
-            {
-                float[] newRot = new float[slotCount];
-                Array.Copy(rotations, 0, newRot, 0, Math.Min(rotations.Length, slotCount));
-                rotations = newRot;
-            }
-
-            if (depths.Length != slotCount)
-            {
-                float[] newDepth = new float[slotCount];
-                Array.Copy(depths, 0, newDepth, 0, Math.Min(depths.Length, slotCount));
-                depths = newDepth;
-            }
+            rotations = ResizeArray(rotations, slotCount);
+            depths = ResizeArray(depths, slotCount);
 
             float previousAngle = MeshAngleRad;
 
@@ -742,17 +643,19 @@ namespace WindowStorageLib
 
             string styleDisplay = windowStyle.Length > 0 ? char.ToUpper(windowStyle[0]) + windowStyle.Substring(1) : windowStyle;
             if (CanOpen)
-            {
-                string state = IsAnyWindowPaneOpen ? Lang.Get("Open") : Lang.Get("Closed");
-                dsc.AppendLine(state);
-            }
+                dsc.AppendLine(IsAnyWindowPaneOpen ? Lang.Get("Open") : Lang.Get("Closed"));
             else
-            {
                 dsc.AppendLine(styleDisplay);
-            }
 
             if (IsFullyStacked) return;
 
+            AppendStaggerInfo(dsc);
+            float ripenRate = AppendPerishInfo(dsc);
+            AppendSelectedSlotInfo(forPlayer, dsc, ripenRate);
+        }
+
+        private void AppendStaggerInfo(StringBuilder dsc)
+        {
             var groups = GetSlotGroups();
             var activeGroups = new List<int>();
             for (int g = 0; g < groups.Count; g++)
@@ -771,7 +674,10 @@ namespace WindowStorageLib
                     dsc.AppendLine(Lang.Get("Display {0}: {1}", g + 1, modeName));
                 }
             }
+        }
 
+        private float AppendPerishInfo(StringBuilder dsc)
+        {
             container.ReloadRoom();
             float perishRate = container.GetPerishRate();
 
@@ -806,18 +712,22 @@ namespace WindowStorageLib
             if (ripenRate > 0f)
                 dsc.AppendLine(Lang.Get("Suitable spot for food ripening."));
 
-            if (forPlayer?.CurrentBlockSelection != null && forPlayer.CurrentBlockSelection.Position == Pos)
-            {
-                int slotIndex = forPlayer.CurrentBlockSelection.SelectionBoxIndex;
-                if (slotIndex >= 0 && slotIndex < inv.Count)
-                {
-                    ItemSlot slot = inv[slotIndex];
-                    if (slot.Empty)
-                        dsc.AppendLine(Lang.Get("Empty"));
-                    else
-                        dsc.Append(PerishableInfoCompact(Api, slot, ripenRate));
-                }
-            }
+            return ripenRate;
+        }
+
+        private void AppendSelectedSlotInfo(IPlayer forPlayer, StringBuilder dsc, float ripenRate)
+        {
+            if (forPlayer?.CurrentBlockSelection == null || forPlayer.CurrentBlockSelection.Position != Pos)
+                return;
+
+            int slotIndex = forPlayer.CurrentBlockSelection.SelectionBoxIndex;
+            if (slotIndex < 0 || slotIndex >= inv.Count) return;
+
+            ItemSlot slot = inv[slotIndex];
+            if (slot.Empty)
+                dsc.AppendLine(Lang.Get("Empty"));
+            else
+                dsc.Append(PerishableInfoCompact(Api, slot, ripenRate));
         }
 
         public static string PerishableInfoCompact(ICoreAPI api, ItemSlot contentSlot, float ripenRate, bool withStackName = true)

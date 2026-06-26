@@ -55,6 +55,29 @@ namespace WindowStorageLib
         }
 
         /// <summary>
+        /// Checks whether the brightest light-emitting item changed after an
+        /// inventory slot modification, and if so removes the old light and
+        /// applies the new one. Called from OnSlotModified on the server side.
+        /// </summary>
+        public void RefreshLightOnSlotChange()
+        {
+            byte[] oldLight = CachedLightHsv;
+            UpdateLightCache();
+            byte[] newLight = CachedLightHsv;
+
+            bool changed = (oldLight == null) != (newLight == null) ||
+                (oldLight != null && newLight != null &&
+                (oldLight[0] != newLight[0] || oldLight[1] != newLight[1] || oldLight[2] != newLight[2]));
+
+            if (changed)
+            {
+                if (oldLight != null)
+                    _be.Api.World.BlockAccessor.RemoveBlockLight(oldLight, _be.Pos);
+                ApplyLight();
+            }
+        }
+
+        /// <summary>
         /// Enqueues a block exchange on the server to force the engine to pick up
         /// the new light value. Only fires when a light-emitting item is present.
         /// </summary>
