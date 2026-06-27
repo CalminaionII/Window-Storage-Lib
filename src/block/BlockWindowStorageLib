@@ -248,6 +248,17 @@ namespace WindowStorageLib
             bool isSprint = ctl.Sprint || ctl.CtrlKey;
             bool isWrench = handSlot?.Itemstack?.Collectible?.Code?.Path?.Contains("wrench") == true;
 
+            // === CRITICAL WRENCH BYPASS ===
+            // If they are holding a wrench, handle rotation immediately and exit.
+            // This stops the wrench from accidentally triggering item placement or slot groups.
+            if (isWrench && !isSneak)
+            {
+                float direction = isSprint ? -1f : 1f;
+                if (world.Side == EnumAppSide.Server)
+                    TryRotateItem(windowBe, byPlayer, blockSel, world, direction);
+                return true;
+            }
+
             // 1. FRAME SELECTION BOX
             if (clickedIndex >= windowBe.Inventory.Count)
             {
@@ -260,7 +271,7 @@ namespace WindowStorageLib
                 var group = frameGroups[frameBoxIndex];
                 bool isWindow = group.IsWindow;
 
-                if (handSlot.Empty && !isSneak && windowBe.CanOpen)
+                if (!isSneak && windowBe.CanOpen)
                 {
                     if (world.Side == EnumAppSide.Server)
                     {
@@ -287,10 +298,12 @@ namespace WindowStorageLib
                 return true;
             }
 
+            // === SHORTCUT MODIFIER GUARDS ===
+            // These execute regardless of what is in the hand, but intercept the click
+            // so item placement doesn't trigger at the same time.
 
-
-            // 2. CYCLE MODES: Empty Hand + Sneak + Sprint
-            if (handSlot.Empty && isSneak && isSprint)
+            // 2. CYCLE MODES: Sneak + Sprint
+            if (isSneak && isSprint)
             {
                 int groupIndex = windowBe.GetGroupForSlotPublic(clickedIndex);
                 var groups = windowBe.GetSlotGroupsPublic();
@@ -299,8 +312,8 @@ namespace WindowStorageLib
                 return true;
             }
 
-            // 3. MODE-SPECIFIC ACTIONS
-            if (handSlot.Empty && isSprint && !isSneak)
+            // 3. MODE-SPECIFIC ACTIONS: Sprint only
+            if (isSprint && !isSneak)
             {
                 int groupIndex = windowBe.GetGroupForSlotPublic(clickedIndex);
                 StaggerMode mode = (StaggerMode)windowBe.staggerModes[groupIndex];
@@ -321,8 +334,8 @@ namespace WindowStorageLib
                 }
             }
 
-            // 4. FINE TUNE BACKWARDS: Empty Hand + Sneak only
-            if (handSlot.Empty && isSneak && !isSprint)
+            // 4. FINE TUNE BACKWARDS: Sneak only
+            if (isSneak && !isSprint)
             {
                 int groupIndex = windowBe.GetGroupForSlotPublic(clickedIndex);
                 StaggerMode mode = (StaggerMode)windowBe.staggerModes[groupIndex];
@@ -333,13 +346,6 @@ namespace WindowStorageLib
                         TryCycleFineTuneDepth(windowBe, byPlayer, blockSel, world, -1f);
                     return true;
                 }
-            }
-            if (isWrench && !isSneak)
-            {
-                float direction = isSprint ? -1f : 1f;
-                if (world.Side == EnumAppSide.Server)
-                    TryRotateItem(windowBe, byPlayer, blockSel, world, direction);
-                return true;
             }
 
             // 5. ITEM INTERACTION: Handle putting/taking items
