@@ -15,16 +15,11 @@ namespace WindowStorageLib
 
         private const float FadeSpeed = 1.5f;
         private const float SmoothSpeed = 0.08f;
-        private float _rainCheckTimer;
-        private const float RainCheckInterval = 2f;
-        private bool _cachedShouldPlay;
-        private readonly bool _rainSoundDisabled;
 
         public WindowSoundHandler(BEWindowStorageLib be, ICoreClientAPI capi)
         {
             _be = be;
             _capi = capi;
-            _rainSoundDisabled = be.Block?.Attributes?["disableRainSound"].AsBool(false) ?? false;
         }
 
         /// <summary>
@@ -42,26 +37,10 @@ namespace WindowStorageLib
 
         /// <summary>
         /// Called from OnClientTick — manages the shared rain sound.
-        /// Expensive rain condition checks are throttled to every 2 seconds;
-        /// volume smoothing still runs every tick for seamless audio.
         /// </summary>
-        public void Tick(float dt)
+        public void Tick()
         {
-            _rainCheckTimer -= dt;
-            if (_rainCheckTimer <= 0)
-            {
-                _rainCheckTimer = RainCheckInterval;
-                _cachedShouldPlay = CheckShouldPlayRain();
-            }
-            TickSharedRainSound(_cachedShouldPlay);
-        }
-
-        private bool CheckShouldPlayRain()
-        {
-            return WindowStorageLibConfig.Current.EnableRainSound
-                && !_rainSoundDisabled
-                && PlayerNearThisWindow((float)WindowStorageLibConfig.Current.RainSoundRange)
-                && IsRainedOn(_be.Pos);
+            TickSharedRainSound();
         }
 
         /// <summary>
@@ -94,8 +73,13 @@ namespace WindowStorageLib
 
         // ── Private ──────────────────────────────────────────────────────────
 
-        private void TickSharedRainSound(bool shouldPlay)
+        private void TickSharedRainSound()
         {
+            bool shouldPlay = WindowStorageLibConfig.Current.EnableRainSound
+                && !(_be.Block?.Attributes?["disableRainSound"].AsBool(false) ?? false)
+                && IsRainedOn(_be.Pos)
+                && PlayerNearThisWindow((float)WindowStorageLibConfig.Current.RainSoundRange);
+
             if (SharedSounds.TryGetValue("rain", out var existing))
             {
                 bool soundAlive = existing.sound != null && !existing.sound.IsDisposed && existing.sound.IsPlaying;
