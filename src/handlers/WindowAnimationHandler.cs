@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AttributeRenderingLibrary;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -18,6 +19,8 @@ namespace WindowStorageLib
         private bool _initSnapPending;
         internal bool InitSnapPending => _initSnapPending;
 
+        private static readonly Dictionary<string, Shape> _shapeCache = new();
+
         public WindowAnimationHandler(BEWindowStorageLib be, ICoreClientAPI capi)
         {
             _be = be;
@@ -34,48 +37,27 @@ namespace WindowStorageLib
             _initSnapPending = true;
             AnimInitialized = false;
 
-            _capi.Event.EnqueueMainThreadTask(() =>
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
+            {
+                _capi.Event.EnqueueMainThreadTask(() =>
+                {
+                    _initSnapPending = false;
+                    if (_be.IsDisposed) return;
+                    InitializeAnimationUtil();
+                    StartInitialAnimations();
+                    _be.MarkMeshesDirty();
+                    AnimInitialized = true;
+                }, "windowstoragelib-initanim");
+            }
+            else
             {
                 _initSnapPending = false;
                 if (_be.IsDisposed) return;
-
                 InitializeAnimationUtil();
-
-                if (animUtil != null && _be.FrameBoxGroups != null)
-                {
-                    for (int i = 0; i < _be.FrameBoxGroups.Length; i++)
-                    {
-                        var group = _be.FrameBoxGroups[i];
-                        if (string.IsNullOrEmpty(group.AnimOpen) || string.IsNullOrEmpty(group.AnimClose))
-                            continue;
-
-                        bool isOpen = i < _be.paneStates.Length && _be.paneStates[i];
-                        string targetAnim = isOpen ? group.AnimOpen : group.AnimClose;
-                        string oppositeAnim = isOpen ? group.AnimClose : group.AnimOpen;
-
-                        animUtil.StopAnimation(oppositeAnim);
-                        if (!animUtil.activeAnimationsByAnimCode.ContainsKey(targetAnim))
-                        {
-                            float configSpeed = WindowStorageLibConfig.Current.AnimationSpeedValue;
-                            animUtil.StartAnimation(new AnimationMetaData()
-                            {
-                                Animation = targetAnim,
-                                Code = targetAnim,
-                                AnimationSpeed = configSpeed,
-                                EaseInSpeed = 10.0f,
-                                EaseOutSpeed = 5f,
-                                Weight = 1.0f,
-                                BlendMode = EnumAnimationBlendMode.Add
-                            });
-                        }
-                    }
-                }
-
-                _be.BuildBlockMeshNow();
+                StartInitialAnimations();
                 _be.MarkMeshesDirty();
                 AnimInitialized = true;
-
-            }, "windowstoragelib-initanim");
+            }
         }
 
         /// <summary>
@@ -88,7 +70,7 @@ namespace WindowStorageLib
         {
             if (_initSnapPending) return;
 
-            _capi.Event.EnqueueMainThreadTask(() =>
+            Action syncAction = () =>
             {
                 if (_be.IsDisposed) return;
 
@@ -113,8 +95,48 @@ namespace WindowStorageLib
 
                 if (paneChanged) _be.SoundHandler?.PlaySlideSound();
                 _be.SoundHandler?.FadeSharedSoundsToCurrentTarget();
+            };
 
-            }, "windowstoragelib-fromtree");
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
+                _capi.Event.EnqueueMainThreadTask(syncAction, "windowstoragelib-fromtree");
+            else
+                syncAction();
+        }
+
+        /// <summary>
+        /// Starts animations for the current pane state without instant snap.
+        /// Used during initial load so animations play at normal speed.
+        /// </summary>
+        private void StartInitialAnimations()
+        {
+            if (animUtil == null || _be.FrameBoxGroups == null) return;
+
+            for (int i = 0; i < _be.FrameBoxGroups.Length; i++)
+            {
+                var group = _be.FrameBoxGroups[i];
+                if (string.IsNullOrEmpty(group.AnimOpen) || string.IsNullOrEmpty(group.AnimClose))
+                    continue;
+
+                bool isOpen = i < _be.paneStates.Length && _be.paneStates[i];
+                string targetAnim = isOpen ? group.AnimOpen : group.AnimClose;
+                string oppositeAnim = isOpen ? group.AnimClose : group.AnimOpen;
+
+                animUtil.StopAnimation(oppositeAnim);
+                if (!animUtil.activeAnimationsByAnimCode.ContainsKey(targetAnim))
+                {
+                    float configSpeed = WindowStorageLibConfig.Current.AnimationSpeedValue;
+                    animUtil.StartAnimation(new AnimationMetaData()
+                    {
+                        Animation = targetAnim,
+                        Code = targetAnim,
+                        AnimationSpeed = configSpeed,
+                        EaseInSpeed = 10.0f,
+                        EaseOutSpeed = 5f,
+                        Weight = 1.0f,
+                        BlendMode = EnumAnimationBlendMode.Add
+                    });
+                }
+            }
         }
 
         /// <summary>
@@ -178,11 +200,15 @@ namespace WindowStorageLib
                 string shapePath = _be.Block?.Attributes?["animationShapePath"].AsString();
                 if (string.IsNullOrEmpty(shapePath)) return;
 
-                Shape animShape = _capi.Assets.TryGet(shapePath)?.ToObject<Shape>();
-                if (animShape == null)
+                if (!_shapeCache.TryGetValue(shapePath, out Shape animShape))
                 {
-                    _be.Api.Logger.Warning($"[WindowStorageLib] Failed to load animation shape: {shapePath}");
-                    return;
+                    animShape = _capi.Assets.TryGet(shapePath)?.ToObject<Shape>();
+                    if (animShape == null)
+                    {
+                        _be.Api.Logger.Warning($"[WindowStorageLib] Failed to load animation shape: {shapePath}");
+                        return;
+                    }
+                    _shapeCache[shapePath] = animShape;
                 }
 
                 ITexPositionSource texSource;
@@ -205,7 +231,7 @@ namespace WindowStorageLib
                 float rot = _be.MeshAngleRad * GameMath.RAD2DEG;
                 animUtil = new BlockEntityAnimationUtil(_capi, _be);
                 animUtil.InitializeAnimator(
-                    $"window-{_be.WindowStyle}-{_be.Pos.X}-{_be.Pos.Y}-{_be.Pos.Z}",
+                    $"windowstoragelib-{_be.WindowStyle}",
                     animShape, texSource, new Vec3f(0, rot, 0)
                 );
             }
@@ -214,6 +240,11 @@ namespace WindowStorageLib
                 _be.Api.Logger.Error($"[WindowStorageLib] Error initializing animation: {e.Message}");
                 animUtil = null;
             }
+        }
+
+        public static void ClearShapeCache()
+        {
+            _shapeCache.Clear();
         }
 
         /// <summary>
