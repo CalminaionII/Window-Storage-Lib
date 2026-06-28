@@ -248,17 +248,6 @@ namespace WindowStorageLib
             bool isSprint = ctl.Sprint || ctl.CtrlKey;
             bool isWrench = handSlot?.Itemstack?.Collectible?.Code?.Path?.Contains("wrench") == true;
 
-            // === CRITICAL WRENCH BYPASS ===
-            // If they are holding a wrench, handle rotation immediately and exit.
-            // This stops the wrench from accidentally triggering item placement or slot groups.
-            if (isWrench && !isSneak)
-            {
-                float direction = isSprint ? -1f : 1f;
-                if (world.Side == EnumAppSide.Server)
-                    TryRotateItem(windowBe, byPlayer, blockSel, world, direction);
-                return true;
-            }
-
             // 1. FRAME SELECTION BOX
             if (clickedIndex >= windowBe.Inventory.Count)
             {
@@ -271,7 +260,7 @@ namespace WindowStorageLib
                 var group = frameGroups[frameBoxIndex];
                 bool isWindow = group.IsWindow;
 
-                if (!isSneak && windowBe.CanOpen)
+                if (windowBe.CanOpen)
                 {
                     if (world.Side == EnumAppSide.Server)
                     {
@@ -295,6 +284,17 @@ namespace WindowStorageLib
                     return true;
                 }
 
+                return true;
+            }
+
+            // === CRITICAL WRENCH BYPASS ===
+            // If they are holding a wrench, handle rotation immediately and exit.
+            // This stops the wrench from accidentally triggering item placement or slot groups.
+            if (isWrench && !isSneak)
+            {
+                float direction = isSprint ? -1f : 1f;
+                if (world.Side == EnumAppSide.Server)
+                    TryRotateItem(windowBe, byPlayer, blockSel, world, direction);
                 return true;
             }
 
@@ -348,7 +348,8 @@ namespace WindowStorageLib
                 }
             }
 
-            // 5. ITEM INTERACTION: Handle putting/taking items
+            // 5. DEFAULT ITEM INTERACTION
+            // Only reached if no shortcut combos or wrenches are being used.
             return HandleItemInteraction(windowBe, byPlayer, blockSel);
         }
 
@@ -389,7 +390,6 @@ namespace WindowStorageLib
                 }
             }
 
-            be.InvalidateTransforms();
             be.MarkDirty(true);
             world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"), blockSel.Position, 0, byPlayer);
             return true;
@@ -404,7 +404,6 @@ namespace WindowStorageLib
             var config = WindowStorageLibConfig.Current;
             float step = config.RotationStepDegrees;
             be.rotations[slotIndex] = (be.rotations[slotIndex] + step * direction + 360f) % 360f;
-            be.InvalidateTransforms();
             be.MarkDirty(true);
 
             world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"),
@@ -430,7 +429,6 @@ namespace WindowStorageLib
             if (next < minDepth - 0.001f) next = maxDepth;
 
             be.depths[slotIndex] = next;
-            be.InvalidateTransforms();
             be.MarkDirty(true);
 
             world.PlaySoundAt(new AssetLocation("game", "sounds/block/cloth"),
